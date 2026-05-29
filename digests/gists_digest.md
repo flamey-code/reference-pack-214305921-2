@@ -1,36 +1,48 @@
-This file is a merged representation of the entire Gist collection, combined into a single document.
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
 
-<file_summary>
-This section contains a summary of this file.
+# File Summary
 
-<purpose>
-This file contains a packed representation of all collected 0xdevalias reverse-engineering gists.
-It is designed to be easily consumable by AI systems for analysis, code review, or other automated processes.
-</purpose>
+## Purpose
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
 
-<file_format>
-The Gist collection is structured under the directories:
-- sources/gists/0xdevalias-frontend-endpoint-mapping/
-- sources/gists/devalias-chatgpt-export-history/
-- sources/gists/devalias-chatgpt-frontend-diff/
-</file_format>
+## File Format
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  a. A header with the file path (## File: path/to/file)
+  b. The full contents of the file in a code block
 
-<usage_guidelines>
-- This file should be treated as read-only. Any changes should be made to the original Gists, not this packed version.
-- Use the file path blocks to distinguish between different Gist files.
-</usage_guidelines>
-</file_summary>
+## Usage Guidelines
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
 
-<directory_structure>
-- sources/gists/0xdevalias-frontend-endpoint-mapping/chatgpt-reverse-engineering-and-deep-dive-code-exploration.md
-- sources/gists/devalias-chatgpt-export-history/chatgpt-api-export.md
-- sources/gists/devalias-chatgpt-frontend-diff/chatgpt-chunk-9087.diff
-</directory_structure>
+## Notes
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
 
-<files>
-=== 
-File: sources/gists/0xdevalias-frontend-endpoint-mapping/chatgpt-reverse-engineering-and-deep-dive-code-exploration.md
-===
+# Directory Structure
+```
+0xdevalias-frontend-endpoint-mapping/chatgpt-reverse-engineering-and-deep-dive-code-exploration.md
+devalias-chatgpt-export-history/chatgpt-api-export.md
+devalias-chatgpt-frontend-diff/chatgpt-chunk-9087.diff
+```
+
+# Files
+
+## File: 0xdevalias-frontend-endpoint-mapping/chatgpt-reverse-engineering-and-deep-dive-code-exploration.md
+````markdown
 # Reverse engineering ChatGPT's frontend web app + deep dive explorations of the code
 
 Figured it would make sense to create a single gist collating my previous deep dive explorations and notes.. so here it is!
@@ -192,10 +204,10 @@ As well as noting a few other bits of information that seemed outdated/missing:
 - [devalias' Beeper CSS Hacks (0xdevalias gist)](https://gist.github.com/0xdevalias/3d2f5a861335cc1277b21a29d1285cfe#beeper-custom-theme-styles)
 - [Reverse Engineering Golang (0xdevalias' gist)](https://gist.github.com/0xdevalias/4e430914124c3fd2c51cb7ac2801acba#reverse-engineering-golang)
 - [Reverse Engineering on macOS (0xdevalias' gist)](https://gist.github.com/0xdevalias/256a8018473839695e8684e37da92c25#reverse-engineering-on-macos)
+````
 
-=== 
-File: sources/gists/devalias-chatgpt-export-history/chatgpt-api-export.md
-===
+## File: devalias-chatgpt-export-history/chatgpt-api-export.md
+````markdown
 _(Edit: I've started collating all of my ChatGPT deep dives and explorations at the following new gist: https://gist.github.com/0xdevalias/4ac297ee3f794c17d0997b4673a2f160)_
 
 ---
@@ -336,10 +348,10 @@ The `resultJson` format looks like this:
   title: "REDACTED"
 }
 ```
+````
 
-=== 
-File: sources/gists/devalias-chatgpt-frontend-diff/chatgpt-chunk-9087.diff
-===
+## File: devalias-chatgpt-frontend-diff/chatgpt-chunk-9087.diff
+````diff
 --- Unsaved view (531)
 +++ Unsaved view (521)
 @@ -1,10 +1,15 @@
@@ -9228,6 +9240,4 @@ File: sources/gists/devalias-chatgpt-frontend-diff/chatgpt-chunk-9087.diff
      {
          "defaultMessage": "Workspace members only",
          "description": "Select value for workspace members only option for sharing"
-
-
-</files>
+````
