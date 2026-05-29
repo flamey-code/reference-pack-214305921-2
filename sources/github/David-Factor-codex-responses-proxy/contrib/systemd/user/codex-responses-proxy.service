@@ -1,0 +1,17 @@
+[Unit]
+Description=Codex Responses Proxy
+Documentation=https://github.com/David-Factor/codex-responses-proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/codex-responses-proxy -addr 127.0.0.1:8787
+Restart=on-failure
+RestartSec=5s
+
+# Keep the proxy private to the local machine by default.
+# If you change -addr, add your own authentication/access controls.
+
+[Install]
+WantedBy=default.target

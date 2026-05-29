@@ -1,0 +1,317 @@
+# Echomine
+
+**Library-first tool for parsing AI conversation exports with search, filtering, and markdown export**
+
+![Beta](https://img.shields.io/badge/status-beta-yellow?style=flat-square)
+[![PyPI Downloads](https://img.shields.io/pepy/dt/echomine)](https://pepy.tech/project/echomine)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Type Checked](https://img.shields.io/badge/mypy-strict-blue.svg)](https://mypy.readthedocs.io/)
+[![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![codecov](https://codecov.io/gh/aucontraire/echomine/graph/badge.svg)](https://codecov.io/gh/aucontraire/echomine)
+[![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://aucontraire.github.io/echomine/)
+
+## Overview
+
+Echomine is a Python library and CLI tool for parsing, searching, and exporting AI conversation exports. Built with a multi-provider adapter pattern, it currently supports OpenAI ChatGPT and Anthropic Claude exports, with extensibility for future AI platforms (Gemini, etc.).
+
+### Key Features
+
+- **Memory Efficient**: Stream-based parsing handles 1GB+ files with constant memory usage
+- **Advanced Search**: BM25 relevance ranking with exact phrase matching, boolean logic, role filtering, and keyword exclusion
+- **Content Fidelity**: Provider-agnostic content type classification with 7-category vocabulary across OpenAI and Claude
+- **Asset Resolution**: Resolve image and file asset pointers to actual files in export bundles with magic-byte detection
+- **Message Snippets**: Automatic preview generation for search results with match context
+- **Statistics & Analytics**: Calculate export statistics, conversation metrics, and temporal patterns
+- **Rich CLI Output**: Color-coded terminal formatting, tables, progress bars, and syntax highlighting
+- **Multiple Export Formats**: Export to Markdown (with YAML frontmatter), JSON, or CSV
+- **Type Safe**: Strict typing with Pydantic v2 and mypy --strict compliance
+- **Library First**: All CLI capabilities available as importable Python library
+- **Multi-Provider Support**: OpenAI ChatGPT and Anthropic Claude exports with auto-detection
+
+### Design Principles
+
+1. **Library-First Architecture**: CLI built on top of library, not vice versa
+2. **Strict Type Safety**: mypy --strict, no `Any` types in public API
+3. **Memory Efficiency**: Stream-based parsing, never load entire file into memory
+4. **Test-Driven Development**: All features test-first validated
+5. **YAGNI**: Simple solutions, no speculative features
+
+See [Constitution](.specify/memory/constitution.md) for complete design principles.
+
+## Installation
+
+### From Source
+
+```bash
+# Clone repository
+git clone https://github.com/echomine/echomine.git
+cd echomine
+
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Install pre-commit hooks (optional)
+pre-commit install
+```
+
+### From PyPI (when published)
+
+```bash
+pip install echomine
+```
+
+## Quick Start
+
+### Library API (Primary Interface)
+
+```python
+from echomine import OpenAIAdapter, ClaudeAdapter, SearchQuery
+from pathlib import Path
+
+# Initialize adapter for your provider (stateless, reusable)
+adapter = OpenAIAdapter()  # For ChatGPT exports
+# adapter = ClaudeAdapter()  # For Claude exports
+export_file = Path("conversations.json")
+
+# 1. List all conversations (discovery)
+for conversation in adapter.stream_conversations(export_file):
+    print(f"[{conversation.created_at.date()}] {conversation.title}")
+    print(f"  Messages: {len(conversation.messages)}")
+
+# 2. Search with keywords (BM25 ranking)
+query = SearchQuery(keywords=["algorithm", "design"], limit=10)
+for result in adapter.search(export_file, query):
+    print(f"{result.conversation.title} (score: {result.score:.2f})")
+    print(f"  Preview: {result.snippet}")  # v1.1.0: automatic snippets
+
+# 3. Advanced search with filters (v1.1.0+)
+from datetime import date
+query = SearchQuery(
+    keywords=["refactor"],
+    phrases=["algo-insights"],  # Exact phrase matching
+    match_mode="all",  # Require ALL keywords (AND logic)
+    exclude_keywords=["test"],  # Filter out unwanted results
+    role_filter="user",  # Search only user messages
+    from_date=date(2024, 1, 1),
+    to_date=date(2024, 3, 31),
+    limit=5
+)
+for result in adapter.search(export_file, query):
+    print(f"[{result.score:.2f}] {result.conversation.title}")
+    print(f"  Snippet: {result.snippet}")
+
+# 4. Calculate statistics (v1.2.0+)
+from echomine import calculate_statistics
+
+stats = calculate_statistics(export_file)
+print(f"Total conversations: {stats.total_conversations}")
+print(f"Total messages: {stats.total_messages}")
+print(f"Average messages: {stats.average_messages:.1f}")
+
+# 5. Get specific conversation by ID
+conversation = adapter.get_conversation_by_id(export_file, "conv-abc123")
+if conversation:
+    print(f"Found: {conversation.title}")
+
+# 6. Access content type metadata (v1.4.0+)
+for conversation in adapter.stream_conversations(export_file):
+    for msg in conversation.messages:
+        category = msg.metadata.get("content_type_category", "unknown")
+        if category == "reasoning":
+            thinking = msg.metadata.get("thinking", {})
+            print(f"  Thinking: {thinking.get('content', '')[:80]}...")
+        elif category == "tool_io":
+            print(f"  Tool call in: {conversation.title}")
+
+# 7. Resolve asset files from OpenAI export bundles (v1.4.0+)
+from echomine.utils.asset_resolver import resolve_asset
+
+for msg in conversation.messages:
+    for img in msg.images:
+        asset = resolve_asset(export_file.parent, img.asset_pointer)
+        if asset:
+            print(f"  Image: {asset.path} ({asset.detected_type})")
+```
+
+### CLI Usage (Built on Library)
+
+```bash
+# Auto-detect provider (default - works for both OpenAI and Claude)
+echomine list export.json
+
+# Explicit provider selection (v1.3.0+)
+echomine list export.json --provider claude
+echomine list export.json --provider openai
+
+# Search by keywords
+echomine search export.json --keywords "algorithm,design" --limit 10
+
+# Search by exact phrase (v1.1.0+)
+echomine search export.json --phrase "algo-insights"
+
+# Boolean match mode: require ALL keywords (v1.1.0+)
+echomine search export.json -k "python" -k "async" --match-mode all
+
+# Exclude unwanted results (v1.1.0+)
+echomine search export.json -k "python" --exclude "django" --exclude "flask"
+
+# Role filtering: search only user/assistant messages (v1.1.0+)
+echomine search export.json -k "refactor" --role user
+
+# Combine all filters (v1.1.0+)
+echomine search export.json --phrase "api" -k "python" --exclude "test" --role user --match-mode all
+
+# Search by title (fast, metadata-only)
+echomine search export.json --title "Project"
+
+# Filter by date range
+echomine search export.json --from-date "2024-01-01" --to-date "2024-03-31"
+
+# View export statistics (v1.2.0+)
+echomine stats export.json
+
+# Get conversation by ID (v1.2.0+)
+echomine get export.json conv-abc123
+
+# Export conversation to markdown with YAML frontmatter (v1.2.0+)
+echomine export export.json conv-abc123 --output algo.md
+
+# Export as JSON
+echomine export export.json conv-abc123 --format json --output algo.json
+
+# Export as CSV (v1.2.0+)
+echomine export export.json conv-abc123 --format csv --output algo.csv
+
+# JSON output for search results
+echomine search export.json --keywords "python" --json | jq '.results[].title'
+
+# Version info
+echomine --version
+```
+
+**Search Filter Logic:** Content matching (phrases OR keywords) happens first, then post-filtering (--exclude, --role, --title, dates) is applied. See [CLI Usage](https://aucontraire.github.io/echomine/cli-usage/#how-search-filters-combine) for details.
+
+See [Quickstart Guide](docs/quickstart.md) for detailed examples.
+
+## Development
+
+### Prerequisites
+
+- Python 3.12 or higher
+- Git
+
+### Setup Development Environment
+
+```bash
+# Clone repository
+git clone https://github.com/echomine/echomine.git
+cd echomine
+
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=echomine --cov-report=html
+
+# Run specific test categories
+pytest -m unit           # Unit tests only
+pytest -m integration    # Integration tests only
+pytest -m contract       # Contract tests only
+pytest -m performance    # Performance benchmarks
+```
+
+### Code Quality
+
+```bash
+# Type checking (strict mode)
+mypy src/
+
+# Linting and formatting
+ruff check .
+ruff format .
+
+# Run pre-commit hooks manually
+pre-commit run --all-files
+```
+
+### Project Structure
+
+```
+echomine/
+├── src/echomine/           # Library source code
+│   ├── models/             # Pydantic data models
+│   ├── adapters/           # Provider adapters (OpenAI, etc.)
+│   ├── parsers/            # Streaming JSON parsers
+│   ├── search/             # Search and ranking logic
+│   ├── exporters/          # Export formatters (markdown, JSON)
+│   └── cli/                # CLI commands
+├── tests/                  # Test suite
+│   ├── unit/               # Unit tests
+│   ├── integration/        # Integration tests
+│   ├── contract/           # Protocol contract tests
+│   └── performance/        # Performance benchmarks
+└── specs/                  # Design documents
+    └── 001-ai-chat-parser/ # Feature specification
+```
+
+## Documentation
+
+**[Full Documentation](https://aucontraire.github.io/echomine/)** - Comprehensive guides, API reference, and examples
+
+### Quick Links
+
+- [Getting Started](https://aucontraire.github.io/echomine/quickstart/)
+- [Library Usage](https://aucontraire.github.io/echomine/library-usage/)
+- [CLI Reference](https://aucontraire.github.io/echomine/cli-usage/)
+- [API Reference](https://aucontraire.github.io/echomine/api/)
+
+### Spec Documents
+
+- [Feature Specification](specs/001-ai-chat-parser/spec.md)
+- [Implementation Plan](specs/001-ai-chat-parser/plan.md)
+- [CLI Interface Contract](specs/001-ai-chat-parser/contracts/cli_spec.md)
+- [Data Model](specs/001-ai-chat-parser/data-model.md)
+
+## Performance
+
+Echomine is designed for memory efficiency and speed:
+
+- **Memory**: O(1) memory usage regardless of file size (streaming-based)
+- **Search**: <30 seconds for 1.6GB files (10K conversations, 50K messages)
+- **Listing**: <5 seconds for 10K conversations
+
+See [Performance Requirements](specs/001-ai-chat-parser/spec.md#performance-requirements) for benchmarks.
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
+- Development setup and prerequisites
+- TDD workflow (RED-GREEN-REFACTOR cycle mandatory)
+- Testing guidelines (pytest, mypy --strict, ruff)
+- Code quality standards and conventions
+- Commit message format (conventional commits)
+- Pull request process
+
+## License
+
+AGPL-3.0 License - See [LICENSE](LICENSE) file for details
+
+## Acknowledgments
+
+Built with:
+- [Pydantic](https://docs.pydantic.dev/) - Data validation and type safety
+- [ijson](https://github.com/ICRAR/ijson) - Streaming JSON parser
+- [Typer](https://typer.tiangolo.com/) - CLI framework
+- [Rich](https://rich.readthedocs.io/) - Terminal formatting
+- [structlog](https://www.structlog.org/) - Structured logging

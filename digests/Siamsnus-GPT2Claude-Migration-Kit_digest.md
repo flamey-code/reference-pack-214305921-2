@@ -1,0 +1,7143 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+CHANGELOG.md
+index.html
+LICENSE
+migrate.js
+project_diagnostic.js
+README.md
+viewer.html
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="CHANGELOG.md">
+# v2.7 Changelog
+
+## New Features
+
+### 🔍 Batch Truncation Detection & Recovery
+**Problem:** The batch endpoint (`/conversations/batch`) intermittently returns incomplete mapping trees. Cross-examination found 143 conversations with missing messages — 6,798 messages lost total — with no warning to the user.
+
+**Fix:** After batch download completes, a new truncation detection pass scans every conversation for suspicious patterns:
+- Conversations with mapping nodes but zero extractable messages
+- Month+ conversations with fewer than 40 mapping nodes
+- Week+ conversations with fewer than 20 nodes
+- Multi-day conversations with fewer than 4 messages
+
+Flagged conversations are automatically re-fetched via the single-conversation endpoint (`GET /conversation/{id}`). If the single endpoint returns more data, the batch result is replaced with the complete version.
+
+**Recovery metadata preserved per conversation:**
+- `_truncation_recovered: true` — marks conversations that were recovered
+- `_batch_node_count` — original node count from batch endpoint
+- `_batch_message_count` — original message count before recovery
+
+**Reporting:**
+- Progress log: `Truncation check: 4 conversation(s) flagged, re-fetching…`
+- Recovery log: `Recovered: [title] (15 → 96 messages)` for each recovered conversation
+- Completion summary includes recovery count: `(3 recovered from truncation)`
+- Clean pass log: `Truncation check: all 4 verified OK`
+
+**Rate limit handling:** If rate-limited during re-fetch, waits 30s and retries automatically.
+
+### 📊 Mapping Node Count Tracking
+- `_mapping_node_count` field added to every exported conversation
+- Records the number of nodes in the conversation's mapping tree
+- Enables post-export analysis and future truncation detection improvements
+
+## Version Bumps
+- `migrate.js` header → v2.7
+- Panel UI badge → v2.7
+- Export JSON `tool` field → v2.7
+- Export `format_version` → 7
+- Memory export header → v2.7
+- Instructions export header → v2.7
+
+## Stats
+- 2,284 → 2,391 lines (+107 lines, +5%)
+- Syntax validated ✅
+
+---
+
+# v2.6 Changelog
+
+## Bug Fixes
+
+### 🔧 Project Discovery Overhaul — "The Kylie Bug"
+**Root cause:** Project conversations were silently dropped because the only API discovery endpoint (`/gizmos/discovery/mine`) returns HTTP 404 on Plus (personal) accounts. The DOM scraping fallback used a single CSS selector that only caught projects visible in the sidebar — typically 1 out of 16+.
+
+**Impact:** Up to ~60% of conversations silently missing from export. On the reporting account: 534 out of 926 conversations dropped with no warning.
+
+**Fix:** Replaced 3-method discovery with 5-method cascade:
+- **Method 1: Conversation scan** — scans fetched conversations for `gizmo_id` fields (existing, improved)
+- **Method 2: `/projects` API** — NEW, tries the projects index endpoint
+- **Method 3: `/gizmos/discovery/mine` API** — existing gizmos endpoint
+- **Method 4: DOM scraping** — now uses 5 CSS selectors for resilience against ChatGPT UI changes, plus a deep fallback that scans ALL anchor elements for `g-p-` patterns
+- **Method 5: `__NEXT_DATA__` scan** — NEW, extracts project IDs from Next.js app state embedded in the page
+
+**Additional improvements:**
+- **Cross-discovery during fetch** — when fetching conversations from a known project, any new `gizmo_id` values found are added to the discovery queue automatically. Projects can now discover other projects.
+- **Discovery method logging** — log shows which methods found projects: "Found 16 project(s) via conversation scan + DOM + __NEXT_DATA__"
+- **API 404 warning** — when both API endpoints return 404, a visible warning appears
+- **Smart hint** — if no projects found but conversations contain project references, suggests scrolling sidebar to load projects into DOM
+- **Per-project summary totals** — "Projects total: 534 new conversations from 16 project(s)"
+
+**Credit:** Bug discovered and diagnosed by [KylieKat17](https://github.com/KylieKat17/Migration-Kit-Discrepancy-Audit)
+
+## Version Bumps
+- `migrate.js` header → v2.6
+- Panel UI badge → v2.6
+- Export JSON `tool` field → v2.6
+- Export `format_version` → 6
+- Memory export header → v2.6
+- Instructions export header → v2.6
+
+## Stats
+- 2,159 → 2,284 lines (+125 lines, +6%)
+- Syntax validated ✅
+
+---
+
+# v2.5 Changelog
+
+## New Features
+
+### 📦 Archived Conversations Export
+- Scans `/conversations?is_archived=true` endpoint to discover archived conversations
+- Paginated scan with progress logging: `Archived: 24 fetched (page 1)`
+- Deduplication: archived conversations already in main list are tagged, not duplicated
+- Appears as "📦 Archived" in the source filter panel
+- Smart filename: `chatgpt_archived_conversations.json` when exporting only archived
+- `archived: true` flag preserved in export JSON per conversation
+- Resolves reports of 50%+ missing conversations from users who archive aggressively
+
+### 📊 Improved Scan Summary
+- Breakdown now shows all source categories: "3,373 main + 24 archived + 1 from 1 project + 3 shared"
+- Only shown when multiple sources detected
+
+## Bug Fixes
+
+### Archived Conversations Were Silently Excluded
+- Root cause: default `/conversations` endpoint excludes archived conversations without any indication
+- The `total` field in API responses is unreliable (returns page count, not grand total)
+- Discovery: `is_archived` field exists on every conversation object but was never checked
+- Two user reports confirmed the gap: ~600 missing (KylieKat17) and ~950 missing (Actual-Air1296)
+
+## Version Bumps
+- `migrate.js` header → v2.5
+- Panel UI badge → v2.5
+- Export JSON `tool` field → v2.5
+- Export `format_version` → 5
+- Memory export header → v2.5
+- Instructions export header → v2.5
+
+## Stats
+- 2,073 → 2,159 lines (+86 lines, +4%)
+- Syntax validated ✅
+
+---
+
+# v2.4 Changelog
+
+## New Features
+
+### 🔍 Search-Powered Selective Export
+- Search box in filter panel — type a keyword to filter conversations by title
+- Live filtering as you type, updates count and download button instantly
+- Export only conversations about "python" or "work" instead of all 3,000+
+
+### 🔗 Shared Conversations Export
+- Discovers and exports conversations you've shared publicly
+- Scans `/shared_conversations` endpoint with pagination
+- Appears as "🔗 Shared conversations" in the source filter
+- Downloads via `/share/{id}` endpoint (separate from batch flow)
+- Deduplication: shared conversations already in main list are tagged, not duplicated
+- Smart filename: `chatgpt_shared_conversations.json` when exporting only shared
+
+### 🧠 Enhanced Memory Export
+- Now uses `include_memory_entries=true` parameter for complete memory data
+- Memories tagged as **warm** (active) or **cold** (older/less relevant)
+- Sorted: warm memories first, cold memories last with `[older/less relevant]` tag
+- Export header shows token usage: "Tokens used: 9,323 / 5,000,000"
+- Completion shows breakdown: "203 memories (199 active, 4 older)"
+
+### ⚙️ Full Profile Export
+- Instructions export now includes beta features and model configuration
+- New endpoints: `/settings/beta_features`, `/models`
+- Captures personality traits, disabled tools, and feature flags
+- Gives Claude complete context about your ChatGPT setup
+
+### 🔍 Account Detection
+- Detects account type at authentication via `/accounts/check/v4-2023-04-27`
+- Logs "Account: Plus (personal)" or "Account: Teams (workspace)" at startup
+- Extracts plan_type, structure, workspace_type, organization_id, HIPAA compliance
+- Account features list captured (entitlements differ from beta_features flags)
+- Workspace detection warns when Teams/Business/Enterprise account found
+- Account info included in conversation export JSON for import context
+
+### 📊 Expanded Instructions Export
+- 3 new endpoints added to instructions export:
+  - `/accounts/check` — full account structure, plan type, features, entitlements
+  - `/codex/usage` — rate limits, credits, plan info for Codex agent
+  - `/compliance` — registration country, cookie/age verification status
+- Instructions export now captures 7 endpoints total (was 4)
+
+### 💾 Conversation Metadata
+- `memory_scope` field preserved per conversation (e.g. "global_enabled")
+- `is_do_not_remember` flag preserved — identifies conversations opted out of memory
+
+### 📷 Desktop Camera Toggle
+- One-click toggle to enable/disable webcam input on desktop ChatGPT
+- Reads current `video_screen_sharing` beta flag state on panel load
+- Toggles via `POST /backend-api/settings/beta_features?feature=video_screen_sharing`
+- Status indicator shows ON/OFF with color coding
+- Instruction note after toggle: "Refresh the page (F5) to see the camera icon"
+- Hides during scan/filter mode to avoid UI clutter
+- **Chromium only** (Chrome, Brave, Edge) — Firefox sets the API flag but ChatGPT doesn't render the camera icon
+
+### 🦊 Firefox Console Paste
+- Full bookmarklet (93KB) exceeds Firefox's ~65KB bookmark URL limit
+- External script loader blocked by ChatGPT's Content-Security-Policy (`connect-src` whitelist)
+- Firefox tab now directs users to console paste method with dedicated copy button
+- Includes `allow pasting` instruction for Firefox's paste protection
+
+## Bug Fixes
+
+### Shared Conversations Progress & Performance
+- Added progress logging during shared conversations scan — was silent "Checking shared conversations..." with no updates
+- Each page now logs: `Shared: 200 unique fetched (page 3)` with live status bar update
+- Fixed infinite pagination loop — `while (sharedItems.length >= 100)` checked total count (always true after page 1), now checks last page size
+- Added cycle detection — if >50% of a page contains IDs already seen, stops pagination (API was returning duplicate/global items)
+- Added hard cap of 50 pages (5,000 items) to prevent runaway pagination
+- Inline dedup during fetch — duplicate shared items skipped before accumulating
+- Fixed O(n²) dedup for tagging shared items in main list — now O(1) hash map lookup
+- Better completion log: `Shared conversations: 500 found (3 unique, 497 already in main)`
+
+### Log Output Fix
+- Fixed missing visual separation between log entries
+- "No projects foundReady." → proper line breaks with 1px padding
+
+## Version Bumps
+- `migrate.js` header → v2.4
+- Panel UI badge → v2.4
+- Export JSON `tool` field → v2.4
+- Export `format_version` → 4
+- Memory export header → v2.4
+- Instructions export header → v2.4
+- Firefox tab → console paste with dedicated copy button
+
+## Stats
+- 1,699 → 2,073 lines (+374 lines, +22%)
+- 12 features/fixes in this release
+- Syntax validated ✅
+</file>
+
+<file path="index.html">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPT to Claude Migration Kit - Export everything from ChatGPT</title>
+<meta name="description" content="Export your ChatGPT memories, conversations, and instructions. No install needed.">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #08080a; --surface: #111114; --surface2: #18181c; --border: #252530;
+    --text: #e4e4ea; --text-dim: #7a7a88; --accent: #d4a574;
+    --accent-glow: rgba(212, 165, 116, 0.15); --gpt: #9898d4;
+    --green: #7eb8a0; --red: #d47474;
+    --mono: 'Space Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.7; min-height: 100vh; overflow-x: hidden; }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"); pointer-events: none; z-index: 1; }
+  .container { max-width: 720px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 2; }
+  .hero { padding: 6rem 0 4rem; text-align: center; }
+  .hero-badge { display: inline-block; padding: 4px 14px; border: 1px solid var(--border); border-radius: 100px; font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); margin-bottom: 2rem; letter-spacing: 0.05em; }
+  .hero h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 1.5rem; }
+  .hero h1 .gpt { color: var(--gpt); } .hero h1 .arrow { color: var(--text-dim); opacity: 0.4; } .hero h1 .claude { color: var(--accent); }
+  .hero p { font-size: 1.1rem; color: var(--text-dim); max-width: 520px; margin: 0 auto 3rem; }
+
+  .install-section { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 3rem 2.5rem; text-align: center; position: relative; overflow: hidden; }
+  .install-section::before { content: ""; position: absolute; top: -1px; left: -1px; right: -1px; height: 3px; background: linear-gradient(90deg, var(--gpt), var(--accent)); border-radius: 20px 20px 0 0; }
+  .install-section h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .install-section .subtitle { color: var(--text-dim); font-size: 0.92rem; margin-bottom: 2rem; }
+
+  /* Tab system */
+  .tab-bar { display: flex; justify-content: center; gap: 0; margin-bottom: 2rem; background: var(--bg); border-radius: 10px; padding: 4px; border: 1px solid var(--border); }
+  .tab-btn { padding: 8px 20px; border: none; background: transparent; color: var(--text-dim); font-family: var(--sans); font-size: 0.85rem; font-weight: 600; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { background: var(--accent); color: var(--bg); }
+  .tab-content { display: none; text-align: left; }
+  .tab-content.active { display: block; }
+
+  .bookmarklet-link { display: inline-flex; align-items: center; gap: 10px; padding: 16px 32px; background: linear-gradient(135deg, #d4a574, #c49060); color: #0a0a0b; font-family: var(--sans); font-size: 1rem; font-weight: 700; text-decoration: none; border-radius: 12px; cursor: grab; transition: all 0.2s ease; box-shadow: 0 4px 20px var(--accent-glow); user-select: none; }
+  .bookmarklet-link:hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--accent-glow); }
+  .drag-hint { margin-top: 1rem; font-size: 0.82rem; color: var(--text-dim); text-align: center; }
+  .drag-hint strong { color: var(--text); }
+
+  .install-steps { text-align: left; }
+  .install-step { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1.25rem; }
+  .install-step-num { flex-shrink: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--accent-glow); color: var(--accent); font-family: var(--mono); font-size: 0.8rem; font-weight: 700; }
+  .install-step p { font-size: 0.9rem; color: var(--text-dim); }
+  .install-step p strong { color: var(--text); }
+
+  .url-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: var(--mono); font-size: 0.7rem; color: var(--accent); word-break: break-all; max-height: 80px; overflow-y: auto; margin: 0.75rem 0; line-height: 1.4; cursor: pointer; transition: border-color 0.2s; }
+  .url-box:hover { border-color: var(--accent); }
+
+  .action-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: var(--accent); color: var(--bg); border: none; border-radius: 10px; font-family: var(--sans); font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+  .action-btn.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .action-btn.secondary:hover { border-color: var(--accent); }
+
+  .copy-confirm { font-size: 0.82rem; color: var(--green); margin-top: 0.5rem; display: none; }
+
+  .browser-detect { font-size: 0.82rem; color: var(--green); margin-bottom: 1rem; font-family: var(--mono); }
+
+  .steps { padding: 4rem 0; }
+  .steps h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 2rem; text-align: center; }
+  .step-list { display: flex; flex-direction: column; gap: 1rem; }
+  .step-item { display: flex; gap: 1.25rem; align-items: flex-start; padding: 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+  .step-item:hover { border-color: #353540; }
+  .step-num { flex-shrink: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-family: var(--mono); font-size: 0.85rem; font-weight: 700; }
+  .step-num.s1 { background: rgba(152,152,212,0.12); color: var(--gpt); }
+  .step-num.s2 { background: var(--accent-glow); color: var(--accent); }
+  .step-num.s3 { background: rgba(126,184,160,0.12); color: var(--green); }
+  .step-text h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .step-text p { font-size: 0.88rem; color: var(--text-dim); }
+
+  .exports-section { padding: 0 0 4rem; }
+  .exports-section h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 2rem; text-align: center; }
+  .export-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .export-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.5rem; text-align: center; }
+  .export-card .icon { font-size: 2rem; margin-bottom: 0.75rem; }
+  .export-card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .export-card p { font-size: 0.8rem; color: var(--text-dim); }
+  .export-card .filename { display: inline-block; margin-top: 0.75rem; font-family: var(--mono); font-size: 0.7rem; padding: 3px 10px; background: var(--surface2); border-radius: 4px; color: var(--accent); }
+
+  .fallback-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 2rem; margin-bottom: 1rem; }
+  .fallback-box h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .fallback-box p { font-size: 0.88rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+
+  .faq { padding: 0 0 4rem; }
+  .faq h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 2rem; text-align: center; }
+  .faq-item { padding: 1.25rem 0; border-bottom: 1px solid var(--border); }
+  .faq-item:first-child { border-top: 1px solid var(--border); }
+  .faq-item h3 { font-size: 0.92rem; font-weight: 600; margin-bottom: 0.4rem; }
+  .faq-item p { font-size: 0.88rem; color: var(--text-dim); }
+
+  .footer { padding: 3rem 0; border-top: 1px solid var(--border); text-align: center; font-size: 0.8rem; color: var(--text-dim); }
+  .footer a { color: var(--accent); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+  .footer p { margin-bottom: 0.4rem; }
+
+  @media (max-width: 640px) { .hero { padding: 4rem 0 3rem; } .install-section { padding: 2rem 1.5rem; } .export-grid { grid-template-columns: 1fr; } .container { padding: 0 1.25rem; } .tab-btn { padding: 6px 12px; font-size: 0.78rem; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="hero">
+    <div class="hero-badge">v2.7 — OPEN SOURCE — MIT LICENSE</div>
+    <h1>Move from <span class="gpt">ChatGPT</span> <span class="arrow">→</span> <span class="claude">Claude</span></h1>
+    <p>Export your memories, every conversation, and all custom instructions. No extensions to install. No data leaves your browser.</p>
+  </div>
+
+  <!-- ========== INSTALL SECTION ========== -->
+  <div class="install-section" id="install">
+    <h2>Add the export tool</h2>
+    <p class="subtitle">Choose your browser, follow the steps. Takes 30 seconds.</p>
+
+    <div id="browser-detect" class="browser-detect"></div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="showTab('chrome')">Chrome / Edge / Brave</button>
+      <button class="tab-btn" onclick="showTab('firefox')">Firefox</button>
+      <button class="tab-btn" onclick="showTab('paste')">Any browser</button>
+    </div>
+
+    <!-- CHROME TAB -->
+    <div class="tab-content active" id="tab-chrome">
+      <div style="text-align:center; margin-bottom:1.5rem;">
+        <a class="bookmarklet-link" id="bookmarklet-btn" href="javascript:!function()%7Bif(document.getElementById(%22gpt2claude-panel%22))%7Bvar%20e%3Ddocument.getElementById(%22gpt2claude-panel%22)%3Breturn%20e.style.animation%3D%22g2c-shake%200.3s%20ease-in-out%22%2Cvoid%20setTimeout(function()%7Be.style.animation%3D%22%22%7D%2C300)%7Dvar%20t%3Ddocument.createElement(%22style%22)%3Bt.textContent%3D%22%20%20%20%20%40keyframes%20g2c-fadein%20%7B%20from%20%7B%20opacity%3A%200%3B%20transform%3A%20translateY(20px)%20scale(0.95)%3B%20%7D%20to%20%7B%20opacity%3A%201%3B%20transform%3A%20translateY(0)%20scale(1)%3B%20%7D%20%7D%20%20%20%20%40keyframes%20g2c-shake%20%7B%200%25%2C100%25%20%7B%20transform%3A%20translateX(0)%3B%20%7D%2025%25%20%7B%20transform%3A%20translateX(-5px)%3B%20%7D%2075%25%20%7B%20transform%3A%20translateX(5px)%3B%20%7D%20%7D%20%20%20%20%40keyframes%20g2c-spin%20%7B%20to%20%7B%20transform%3A%20rotate(360deg)%3B%20%7D%20%7D%20%20%20%20%40keyframes%20g2c-pulse%20%7B%200%25%2C100%25%20%7B%20opacity%3A%201%3B%20%7D%2050%25%20%7B%20opacity%3A%200.5%3B%20%7D%20%7D%20%20%20%20%40keyframes%20g2c-indeterminate%20%7B%200%25%20%7B%20left%3A%20-30%25%3B%20width%3A%2030%25%3B%20%7D%2050%25%20%7B%20left%3A%2050%25%3B%20width%3A%2030%25%3B%20%7D%20100%25%20%7B%20left%3A%20100%25%3B%20width%3A%2030%25%3B%20%7D%20%7D%20%20%20%20%40keyframes%20g2c-pulse-count%20%7B%200%25%2C100%25%20%7B%20opacity%3A%201%3B%20%7D%2050%25%20%7B%20opacity%3A%200.7%3B%20%7D%20%7D%20%20%20%20%40keyframes%20g2c-dot-bounce%20%7B%200%25%2C80%25%2C100%25%20%7B%20transform%3A%20translateY(0)%3B%20%7D%2040%25%20%7B%20transform%3A%20translateY(-4px)%3B%20%7D%20%7D%20%20%20%20.g2c-progress-fill.indeterminate%20%7B%20position%3A%20relative%3B%20width%3A%20100%25%20!important%3B%20background%3A%20none%20!important%3B%20overflow%3A%20hidden%3B%20%7D%20%20%20%20.g2c-progress-fill.indeterminate%3A%3Aafter%20%7B%20content%3A%20''%3B%20position%3A%20absolute%3B%20top%3A%200%3B%20left%3A%20-30%25%3B%20width%3A%2030%25%3B%20height%3A%20100%25%3B%20background%3A%20linear-gradient(90deg%2C%20transparent%2C%20%23d4a574%2C%20transparent)%3B%20border-radius%3A%203px%3B%20animation%3A%20g2c-indeterminate%201.5s%20ease-in-out%20infinite%3B%20%7D%20%20%20%20.g2c-scan-hero%20%7B%20text-align%3A%20center%3B%20padding%3A%2020px%200%2010px%3B%20%7D%20%20%20%20.g2c-scan-hero%20.g2c-scan-count%20%7B%20font-size%3A%2042px%3B%20font-weight%3A%20800%3B%20color%3A%20%23d4a574%3B%20font-variant-numeric%3A%20tabular-nums%3B%20animation%3A%20g2c-pulse-count%202s%20ease-in-out%20infinite%3B%20line-height%3A%201%3B%20%7D%20%20%20%20.g2c-scan-hero%20.g2c-scan-label%20%7B%20font-size%3A%2012px%3B%20color%3A%20%23888%3B%20margin-top%3A%204px%3B%20%7D%20%20%20%20.g2c-scan-hero%20.g2c-scan-status%20%7B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20justify-content%3A%20center%3B%20gap%3A%206px%3B%20margin-top%3A%2012px%3B%20font-size%3A%2012px%3B%20color%3A%20%23999%3B%20%7D%20%20%20%20.g2c-scan-dots%20%7B%20display%3A%20flex%3B%20gap%3A%203px%3B%20%7D%20%20%20%20.g2c-scan-dots%20span%20%7B%20width%3A%204px%3B%20height%3A%204px%3B%20background%3A%20%23d4a574%3B%20border-radius%3A%2050%25%3B%20animation%3A%20g2c-dot-bounce%201.2s%20ease-in-out%20infinite%3B%20%7D%20%20%20%20.g2c-scan-dots%20span%3Anth-child(2)%20%7B%20animation-delay%3A%200.15s%3B%20%7D%20%20%20%20.g2c-scan-dots%20span%3Anth-child(3)%20%7B%20animation-delay%3A%200.3s%3B%20%7D%20%20%20%20.g2c-scan-models%20%7B%20display%3A%20flex%3B%20flex-wrap%3A%20wrap%3B%20gap%3A%204px%3B%20justify-content%3A%20center%3B%20margin-top%3A%2014px%3B%20padding-top%3A%2014px%3B%20border-top%3A%201px%20solid%20%232a2a35%3B%20%7D%20%20%20%20.g2c-scan-tag%20%7B%20font-size%3A%2010px%3B%20padding%3A%203px%2010px%3B%20background%3A%20%231e1e26%3B%20border%3A%201px%20solid%20%232a2a35%3B%20border-radius%3A%2020px%3B%20color%3A%20%23a0a0e0%3B%20font-family%3A%20'SF%20Mono'%2C%20Consolas%2C%20monospace%3B%20%7D%20%20%20%20.g2c-scan-reassure%20%7B%20font-size%3A%2011px%3B%20color%3A%20%23555%3B%20text-align%3A%20center%3B%20margin-top%3A%2012px%3B%20%7D%20%20%20%20.g2c-dl-hero%20%7B%20text-align%3A%20center%3B%20padding%3A%2016px%200%208px%3B%20%7D%20%20%20%20.g2c-dl-hero%20.g2c-dl-count%20%7B%20font-size%3A%2028px%3B%20font-weight%3A%20700%3B%20color%3A%20%237eb8a0%3B%20%7D%20%20%20%20.g2c-dl-hero%20.g2c-dl-of%20%7B%20font-size%3A%2014px%3B%20color%3A%20%23555%3B%20%7D%20%20%20%20.g2c-dl-hero%20.g2c-dl-title%20%7B%20font-size%3A%2011px%3B%20color%3A%20%23888%3B%20margin-top%3A%206px%3B%20white-space%3A%20nowrap%3B%20overflow%3A%20hidden%3B%20text-overflow%3A%20ellipsis%3B%20padding%3A%200%2010px%3B%20%7D%20%20%20%20.g2c-dl-pct%20%7B%20font-size%3A%2011px%3B%20color%3A%20%23d4a574%3B%20font-family%3A%20'SF%20Mono'%2C%20Consolas%2C%20monospace%3B%20text-align%3A%20right%3B%20margin-top%3A%206px%3B%20%7D%20%20%20%20.g2c-dl-remaining%20%7B%20font-size%3A%2011px%3B%20color%3A%20%23666%3B%20text-align%3A%20center%3B%20margin-top%3A%208px%3B%20%7D%20%20%20%20.g2c-complete%20%7B%20text-align%3A%20center%3B%20padding%3A%2020px%200%2010px%3B%20%7D%20%20%20%20.g2c-complete-icon%20%7B%20font-size%3A%2036px%3B%20margin-bottom%3A%206px%3B%20%7D%20%20%20%20.g2c-complete-title%20%7B%20font-size%3A%2018px%3B%20font-weight%3A%20700%3B%20color%3A%20%237eb8a0%3B%20%7D%20%20%20%20.g2c-complete-sub%20%7B%20font-size%3A%2012px%3B%20color%3A%20%23888%3B%20margin-top%3A%206px%3B%20%7D%20%20%20%20.g2c-complete-models%20%7B%20font-size%3A%2011px%3B%20color%3A%20%23d4a574%3B%20margin-top%3A%206px%3B%20font-family%3A%20'SF%20Mono'%2C%20Consolas%2C%20monospace%3B%20%7D.g2c-complete-models-wrap%20%7B%20display%3A%20flex%3B%20flex-wrap%3A%20wrap%3B%20gap%3A%204px%3B%20justify-content%3A%20center%3B%20margin-top%3A%2012px%3B%20%7D.g2c-models-extra%20%7B%20display%3A%20flex%3B%20flex-wrap%3A%20wrap%3B%20gap%3A%204px%3B%20justify-content%3A%20center%3B%20width%3A%20100%25%3B%20margin-top%3A%204px%3B%20%7D.g2c-models-toggle%20%7B%20font-size%3A%2010px%3B%20padding%3A%203px%2010px%3B%20background%3A%20none%3B%20border%3A%201px%20dashed%20%23333340%3B%20border-radius%3A%2020px%3B%20color%3A%20%23888%3B%20cursor%3A%20pointer%3B%20font-family%3A%20'SF%20Mono'%2C%20Consolas%2C%20monospace%3B%20%7D.g2c-models-toggle%3Ahover%20%7B%20border-color%3A%20%23d4a574%3B%20color%3A%20%23d4a574%3B%20%7D%20%20%20%20.g2c-whatsnext%20%7B%20margin%3A%2016px%200%3B%20padding%3A%2014px%3B%20background%3A%20%23141418%3B%20border%3A%201px%20solid%20%23252530%3B%20border-radius%3A%2010px%3B%20%7D%20%20%20%20.g2c-whatsnext-title%20%7B%20font-size%3A%2011px%3B%20color%3A%20%23888%3B%20margin-bottom%3A%2010px%3B%20font-weight%3A%20600%3B%20%7D%20%20%20%20.g2c-whatsnext-item%20%7B%20font-size%3A%2012px%3B%20color%3A%20%23ccc%3B%20line-height%3A%201.8%3B%20margin-bottom%3A%2010px%3B%20%7D%20%20%20%20.g2c-whatsnext-item%3Alast-child%20%7B%20margin-bottom%3A%200%3B%20%7D%20%20%20%20.g2c-whatsnext-item%20a%20%7B%20color%3A%20%23d4a574%3B%20text-decoration%3A%20none%3B%20%7D%20%20%20%20.g2c-whatsnext-item%20a%3Ahover%20%7B%20text-decoration%3A%20underline%3B%20%7D%20%20%20%20.g2c-whatsnext-badge%20%7B%20font-size%3A%2010px%3B%20color%3A%20%237eb8a0%3B%20background%3A%20rgba(126%2C184%2C160%2C0.12)%3B%20padding%3A%201px%206px%3B%20border-radius%3A%204px%3B%20%7D%20%20%20%20.g2c-copy-log%20%7B%20background%3A%20none%3B%20border%3A%20none%3B%20color%3A%20%23666%3B%20font-size%3A%2011px%3B%20cursor%3A%20pointer%3B%20padding%3A%206px%200%3B%20margin-top%3A%2010px%3B%20margin-left%3A%2012px%3B%20%7D%20%20%20%20.g2c-copy-log%3Ahover%20%7B%20color%3A%20%23aaa%3B%20%7D%20%20%20%20%23gpt2claude-panel%20%7B%20position%3A%20fixed%3B%20top%3A%2050%25%3B%20right%3A%2024px%3B%20transform%3A%20translateY(-50%25)%3B%20width%3A%20360px%3B%20background%3A%20%231a1a1f%3B%20border%3A%201px%20solid%20%23333340%3B%20border-radius%3A%2016px%3B%20box-shadow%3A%200%2025px%2060px%20rgba(0%2C0%2C0%2C0.5)%2C%200%200%200%201px%20rgba(255%2C255%2C255%2C0.06)%3B%20z-index%3A%20999999%3B%20font-family%3A%20-apple-system%2C%20BlinkMacSystemFont%2C%20'Segoe%20UI'%2C%20sans-serif%3B%20color%3A%20%23e8e8ec%3B%20animation%3A%20g2c-fadein%200.3s%20ease-out%3B%20%7D%20%20%20%20%23gpt2claude-panel%20*%20%7B%20box-sizing%3A%20border-box%3B%20margin%3A%200%3B%20padding%3A%200%3B%20%7D%20%20%20%20.g2c-header%20%7B%20display%3A%20flex%3B%20justify-content%3A%20space-between%3B%20align-items%3A%20center%3B%20padding%3A%2018px%2022px%2014px%3B%20border-bottom%3A%201px%20solid%20%232a2a35%3B%20background%3A%20%231e1e24%3B%20border-radius%3A%2016px%2016px%200%200%3B%20%7D%20%20%20%20.g2c-title%20%7B%20font-size%3A%2015px%3B%20font-weight%3A%20700%3B%20letter-spacing%3A%20-0.01em%3B%20%7D%20%20%20%20.g2c-title%20span.gpt%20%7B%20color%3A%20%23a0a0e0%3B%20%7D%20%20%20%20.g2c-title%20span.arrow%20%7B%20color%3A%20%23555%3B%20margin%3A%200%204px%3B%20%7D%20%20%20%20.g2c-title%20span.claude%20%7B%20color%3A%20%23d4a574%3B%20%7D%20%20%20%20.g2c-version%20%7B%20font-size%3A%2010px%3B%20color%3A%20%23666%3B%20font-weight%3A%20600%3B%20margin-top%3A%202px%3B%20%7D%20%20%20%20.g2c-close%20%7B%20background%3A%20none%3B%20border%3A%20none%3B%20color%3A%20%23777%3B%20font-size%3A%2020px%3B%20cursor%3A%20pointer%3B%20padding%3A%204px%208px%3B%20border-radius%3A%206px%3B%20line-height%3A%201%3B%20%7D%20%20%20%20.g2c-close%3Ahover%20%7B%20background%3A%20%23252530%3B%20color%3A%20%23e8e8ec%3B%20%7D%20%20%20%20.g2c-body%20%7B%20padding%3A%2018px%2022px%2014px%3B%20%7D%20%20%20%20.g2c-btn%20%7B%20width%3A%20100%25%3B%20padding%3A%2014px%2016px%3B%20border%3A%201px%20solid%20%23333340%3B%20border-radius%3A%2012px%3B%20background%3A%20%23222228%3B%20color%3A%20%23e8e8ec%3B%20font-size%3A%2013px%3B%20font-weight%3A%20600%3B%20cursor%3A%20pointer%3B%20text-align%3A%20left%3B%20margin-bottom%3A%2010px%3B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20gap%3A%2012px%3B%20transition%3A%20all%200.15s%20ease%3B%20position%3A%20relative%3B%20overflow%3A%20hidden%3B%20%7D%20%20%20%20.g2c-btn%3Ahover%20%7B%20background%3A%20%232a2a32%3B%20border-color%3A%20%23444450%3B%20transform%3A%20translateY(-1px)%3B%20%7D%20%20%20%20.g2c-btn%3Aactive%20%7B%20transform%3A%20translateY(0)%3B%20%7D%20%20%20%20.g2c-btn.running%20%7B%20pointer-events%3A%20none%3B%20border-color%3A%20%23d4a574%3B%20%7D%20%20%20%20.g2c-btn.done%20%7B%20border-color%3A%20%237eb8a0%3B%20%7D%20%20%20%20.g2c-btn.error%20%7B%20border-color%3A%20%23e07070%3B%20%7D%20%20%20%20.g2c-btn-icon%20%7B%20font-size%3A%2020px%3B%20width%3A%2028px%3B%20text-align%3A%20center%3B%20flex-shrink%3A%200%3B%20%7D%20%20%20%20.g2c-btn-text%20%7B%20flex%3A%201%3B%20%7D%20%20%20%20.g2c-btn-sub%20%7B%20font-size%3A%2011px%3B%20color%3A%20%23777%3B%20font-weight%3A%20400%3B%20margin-top%3A%203px%3B%20%7D%20%20%20%20.g2c-progress%20%7B%20margin-top%3A%2010px%3B%20%7D%20%20%20%20.g2c-progress-bar%20%7B%20width%3A%20100%25%3B%20height%3A%205px%3B%20background%3A%20%23252530%3B%20border-radius%3A%203px%3B%20overflow%3A%20hidden%3B%20%7D%20%20%20%20.g2c-progress-fill%20%7B%20height%3A%20100%25%3B%20background%3A%20linear-gradient(90deg%2C%20%23d4a574%2C%20%23e8c49a)%3B%20border-radius%3A%203px%3B%20transition%3A%20width%200.3s%20ease%3B%20width%3A%200%25%3B%20%7D%20%20%20%20.g2c-progress-text%20%7B%20font-size%3A%2011px%3B%20color%3A%20%23999%3B%20margin-top%3A%206px%3B%20%7D%20%20%20%20.g2c-log%20%7B%20margin-top%3A%2014px%3B%20max-height%3A%20140px%3B%20overflow-y%3A%20auto%3B%20background%3A%20%23141418%3B%20border%3A%201px%20solid%20%23252530%3B%20border-radius%3A%2010px%3B%20padding%3A%2010px%2012px%3B%20font-family%3A%20'SF%20Mono'%2C%20'Consolas'%2C%20monospace%3B%20font-size%3A%2011px%3B%20line-height%3A%201.6%3B%20color%3A%20%23999%3B%20display%3A%20none%3B%20%7D%20%20%20%20.g2c-log.visible%20%7B%20display%3A%20block%3B%20%7D%20%20%20%20.g2c-log-entry%20%7B%20white-space%3A%20nowrap%3B%20overflow%3A%20hidden%3B%20text-overflow%3A%20ellipsis%3B%20padding%3A%201px%200%3B%20%7D%20%20%20%20.g2c-log-entry.error%20%7B%20color%3A%20%23e07070%3B%20%7D%20%20%20%20.g2c-log-entry.success%20%7B%20color%3A%20%237eb8a0%3B%20%7D%20%20%20%20.g2c-footer%20%7B%20padding%3A%2014px%2022px%3B%20border-top%3A%201px%20solid%20%23252530%3B%20display%3A%20flex%3B%20justify-content%3A%20space-between%3B%20align-items%3A%20center%3B%20%7D%20%20%20%20.g2c-footer-text%20%7B%20font-size%3A%2010px%3B%20color%3A%20%23555%3B%20%7D%20%20%20%20.g2c-footer-link%20%7B%20font-size%3A%2010px%3B%20color%3A%20%23d4a574%3B%20text-decoration%3A%20none%3B%20%7D%20%20%20%20.g2c-footer-link%3Ahover%20%7B%20text-decoration%3A%20underline%3B%20%7D%20%20%20%20.g2c-spinner%20%7B%20display%3A%20inline-block%3B%20width%3A%2016px%3B%20height%3A%2016px%3B%20border%3A%202px%20solid%20%23444%3B%20border-top-color%3A%20%23d4a574%3B%20border-radius%3A%2050%25%3B%20animation%3A%20g2c-spin%200.6s%20linear%20infinite%3B%20%7D%20%20%20%20.g2c-toggle-log%20%7B%20background%3A%20none%3B%20border%3A%20none%3B%20color%3A%20%23666%3B%20font-size%3A%2011px%3B%20cursor%3A%20pointer%3B%20padding%3A%206px%200%3B%20margin-top%3A%2010px%3B%20%7D%20%20%20%20.g2c-toggle-log%3Ahover%20%7B%20color%3A%20%23aaa%3B%20%7D%20%20%20%20.g2c-drag-handle%20%7B%20cursor%3A%20move%3B%20%7D%20%20%20%20.g2c-divider%20%7B%20height%3A%201px%3B%20background%3A%20%232a2a35%3B%20margin%3A%206px%200%2010px%3B%20%7D%20%20%20%20.g2c-tool-row%20%7B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20justify-content%3A%20space-between%3B%20padding%3A%208px%2012px%3B%20background%3A%20%231e1e26%3B%20border%3A%201px%20solid%20%23252530%3B%20border-radius%3A%2010px%3B%20margin-bottom%3A%206px%3B%20%7D%20%20%20%20.g2c-tool-label%20%7B%20font-size%3A%2012px%3B%20color%3A%20%23ccc%3B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20gap%3A%208px%3B%20%7D%20%20%20%20.g2c-tool-label%20.icon%20%7B%20font-size%3A%2016px%3B%20%7D%20%20%20%20.g2c-tool-label%20.sub%20%7B%20font-size%3A%2010px%3B%20color%3A%20%23666%3B%20display%3A%20block%3B%20%7D%20%20%20%20.g2c-tool-toggle%20%7B%20padding%3A%204px%2012px%3B%20border-radius%3A%206px%3B%20border%3A%201px%20solid%20%23333340%3B%20background%3A%20%23222228%3B%20color%3A%20%23999%3B%20font-size%3A%2011px%3B%20cursor%3A%20pointer%3B%20font-weight%3A%20600%3B%20transition%3A%20all%200.15s%3B%20%7D%20%20%20%20.g2c-tool-toggle%3Ahover%20%7B%20border-color%3A%20%23d4a574%3B%20color%3A%20%23d4a574%3B%20%7D%20%20%20%20.g2c-tool-toggle.on%20%7B%20border-color%3A%20%237eb8a0%3B%20color%3A%20%237eb8a0%3B%20background%3A%20rgba(126%2C184%2C160%2C0.08)%3B%20%7D%20%20%20%20.g2c-tool-toggle.checking%20%7B%20pointer-events%3A%20none%3B%20color%3A%20%23555%3B%20%7D%20%20%20%20.g2c-tool-note%20%7B%20font-size%3A%2010px%3B%20color%3A%20%237eb8a0%3B%20text-align%3A%20center%3B%20padding%3A%204px%200%202px%3B%20display%3A%20none%3B%20%7D%20%20%20%20.g2c-filter-panel%20%7B%20margin-top%3A%2010px%3B%20%7D%20%20%20%20.g2c-filter-section%20%7B%20margin-bottom%3A%2012px%3B%20%7D%20%20%20%20.g2c-filter-label%20%7B%20font-size%3A%2010px%3B%20color%3A%20%23888%3B%20font-weight%3A%20600%3B%20text-transform%3A%20uppercase%3B%20letter-spacing%3A%200.05em%3B%20margin-bottom%3A%206px%3B%20%7D%20%20%20%20.g2c-filter-models%20%7B%20max-height%3A%20120px%3B%20overflow-y%3A%20auto%3B%20background%3A%20%23141418%3B%20border%3A%201px%20solid%20%23252530%3B%20border-radius%3A%208px%3B%20padding%3A%206px%208px%3B%20%7D%20%20%20%20.g2c-model-row%20%7B%20display%3A%20flex%3B%20align-items%3A%20center%3B%20padding%3A%203px%200%3B%20font-size%3A%2012px%3B%20cursor%3A%20pointer%3B%20color%3A%20%23ccc%3B%20%7D%20%20%20%20.g2c-model-row%3Ahover%20%7B%20color%3A%20%23fff%3B%20%7D%20%20%20%20.g2c-model-row%20input%20%7B%20margin-right%3A%208px%3B%20accent-color%3A%20%23d4a574%3B%20%7D%20%20%20%20.g2c-model-row%20.cnt%20%7B%20color%3A%20%23666%3B%20margin-left%3A%20auto%3B%20font-size%3A%2010px%3B%20font-family%3A%20monospace%3B%20%7D%20%20%20%20.g2c-filter-row%20%7B%20display%3A%20flex%3B%20gap%3A%208px%3B%20align-items%3A%20center%3B%20margin-bottom%3A%206px%3B%20%7D%20%20%20%20.g2c-filter-input%20%7B%20flex%3A%201%3B%20padding%3A%206px%208px%3B%20background%3A%20%23141418%3B%20border%3A%201px%20solid%20%23252530%3B%20border-radius%3A%206px%3B%20color%3A%20%23e8e8ec%3B%20font-size%3A%2012px%3B%20font-family%3A%20monospace%3B%20outline%3A%20none%3B%20%7D%20%20%20%20.g2c-filter-input%3Afocus%20%7B%20border-color%3A%20%23d4a574%3B%20%7D%20%20%20%20.g2c-filter-input%3A%3Aplaceholder%20%7B%20color%3A%20%23555%3B%20%7D%20%20%20%20.g2c-filter-summary%20%7B%20font-size%3A%2012px%3B%20color%3A%20%23d4a574%3B%20padding%3A%208px%200%3B%20font-weight%3A%20600%3B%20%7D%20%20%20%20.g2c-filter-drop%20%7B%20border%3A%201px%20dashed%20%23333340%3B%20border-radius%3A%208px%3B%20padding%3A%2010px%3B%20text-align%3A%20center%3B%20font-size%3A%2011px%3B%20color%3A%20%23666%3B%20cursor%3A%20pointer%3B%20transition%3A%20all%200.15s%3B%20%7D%20%20%20%20.g2c-filter-drop%3Ahover%20%7B%20border-color%3A%20%23d4a574%3B%20color%3A%20%23999%3B%20%7D%20%20%20%20.g2c-filter-drop.active%20%7B%20border-color%3A%20%237eb8a0%3B%20color%3A%20%237eb8a0%3B%20%7D%20%20%20%20.g2c-select-btns%20%7B%20display%3A%20flex%3B%20gap%3A%206px%3B%20margin-top%3A%204px%3B%20%7D%20%20%20%20.g2c-select-btns%20button%20%7B%20background%3A%20none%3B%20border%3A%20none%3B%20color%3A%20%23666%3B%20font-size%3A%2010px%3B%20cursor%3A%20pointer%3B%20padding%3A%200%3B%20%7D%20%20%20%20.g2c-select-btns%20button%3Ahover%20%7B%20color%3A%20%23d4a574%3B%20%7D%20%20%22%2Cdocument.head.appendChild(t)%3Bvar%20n%3Ddocument.createElement(%22div%22)%3Bn.id%3D%22gpt2claude-panel%22%2Cn.innerHTML%3D'%20%20%20%20%3Cdiv%20class%3D%22g2c-header%20g2c-drag-handle%22%3E%20%20%20%20%20%20%3Cdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-title%22%3E%3Cspan%20class%3D%22gpt%22%3EGPT%3C%2Fspan%3E%3Cspan%20class%3D%22arrow%22%3E%E2%86%92%3C%2Fspan%3E%3Cspan%20class%3D%22claude%22%3EClaude%3C%2Fspan%3E%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-version%22%3EMigration%20Kit%20v2.7%3C%2Fdiv%3E%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-close%22%20id%3D%22g2c-close%22%3E%C3%97%3C%2Fbutton%3E%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%3Cdiv%20class%3D%22g2c-body%22%3E%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-btn%22%20id%3D%22g2c-btn-memory%22%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-icon%22%3E%F0%9F%A7%A0%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-text%22%3E%20%20%20%20%20%20%20%20%20%20Export%20Memories%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-sub%22%3EFacts%20ChatGPT%20learned%20about%20you%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%3C%2Fbutton%3E%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-btn%22%20id%3D%22g2c-btn-convos%22%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-icon%22%3E%F0%9F%92%AC%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-text%22%3E%20%20%20%20%20%20%20%20%20%20Export%20All%20Conversations%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-sub%22%3EScans%20first%2C%20then%20you%20choose%20what%20to%20download%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%3C%2Fbutton%3E%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-btn%22%20id%3D%22g2c-btn-instructions%22%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-icon%22%3E%E2%9A%99%EF%B8%8F%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-text%22%3E%20%20%20%20%20%20%20%20%20%20Export%20Instructions%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-sub%22%3ECustom%20instructions%20%26amp%3B%20settings%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%3C%2Fbutton%3E%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-btn%22%20id%3D%22g2c-btn-all%22%20style%3D%22border-color%3A%23d4a574%3Bbackground%3A%23222228%3B%22%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-icon%22%3E%F0%9F%93%A5%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-text%22%3E%20%20%20%20%20%20%20%20%20%20%3Cspan%20style%3D%22color%3A%23d4a574%3B%22%3EExport%20Everything%3C%2Fspan%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-sub%22%3EAll%20three%20in%20one%20click%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%3C%2Fbutton%3E%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-divider%22%20id%3D%22g2c-camera-divider%22%3E%3C%2Fdiv%3E%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-tool-row%22%20id%3D%22g2c-camera-row%22%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-tool-label%22%3E%20%20%20%20%20%20%20%20%20%20%3Cspan%20class%3D%22icon%22%3E%F0%9F%93%B7%3C%2Fspan%3E%20%20%20%20%20%20%20%20%20%20%3Cspan%3EDesktop%20Camera%3Cspan%20class%3D%22sub%22%3EChromium%20only%20(Chrome%2C%20Brave%2C%20Edge)%3C%2Fspan%3E%3C%2Fspan%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-tool-toggle%22%20id%3D%22g2c-camera-btn%22%3ECheck%3C%2Fbutton%3E%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-tool-note%22%20id%3D%22g2c-camera-note%22%3E%3C%2Fdiv%3E%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-progress%22%20id%3D%22g2c-progress%22%20style%3D%22display%3Anone%3B%22%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-progress-bar%22%3E%3Cdiv%20class%3D%22g2c-progress-fill%22%20id%3D%22g2c-progress-fill%22%3E%3C%2Fdiv%3E%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-progress-text%22%20id%3D%22g2c-progress-text%22%3E%3C%2Fdiv%3E%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-toggle-log%22%20id%3D%22g2c-toggle-log%22%3EShow%20log%20%E2%96%BC%3C%2Fbutton%3E%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-copy-log%22%20id%3D%22g2c-copy-log%22%3ECopy%20log%3C%2Fbutton%3E%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-log%22%20id%3D%22g2c-log%22%3E%3C%2Fdiv%3E%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%3Cdiv%20class%3D%22g2c-footer%22%3E%20%20%20%20%20%20%3Cspan%20class%3D%22g2c-footer-text%22%3EAll%20data%20stays%20in%20your%20browser%3C%2Fspan%3E%20%20%20%20%20%20%3Ca%20class%3D%22g2c-footer-link%22%20href%3D%22https%3A%2F%2Fgithub.com%2FSiamsnus%2FGPT2Claude-Migration-Kit%22%20target%3D%22_blank%22%3EGitHub%3C%2Fa%3E%20%20%20%20%3C%2Fdiv%3E%20%20'%2Cdocument.body.appendChild(n)%3Bvar%20a%3D!1%2Co%3D0%2Cr%3D0%3Bn.querySelector(%22.g2c-drag-handle%22).addEventListener(%22mousedown%22%2Cfunction(e)%7Bif(!e.target.classList.contains(%22g2c-close%22))%7Ba%3D!0%3Bvar%20t%3Dn.getBoundingClientRect()%3Bo%3De.clientX-t.left%2Cr%3De.clientY-t.top%2Cn.style.transition%3D%22none%22%2Ce.preventDefault()%7D%7D)%2Cdocument.addEventListener(%22mousemove%22%2Cfunction(e)%7Ba%26%26(n.style.right%3D%22auto%22%2Cn.style.transform%3D%22none%22%2Cn.style.left%3De.clientX-o%2B%22px%22%2Cn.style.top%3De.clientY-r%2B%22px%22)%7D)%2Cdocument.addEventListener(%22mouseup%22%2Cfunction()%7Ba%3D!1%2Cn.style.transition%3D%22%22%7D)%3Bvar%20i%3Ddocument.getElementById(%22g2c-log%22)%3Bdocument.getElementById(%22g2c-progress%22)%2Cdocument.getElementById(%22g2c-progress-fill%22)%2Cdocument.getElementById(%22g2c-progress-text%22)%3Bfunction%20s(e%2Ct)%7Bvar%20n%3Ddocument.createElement(%22div%22)%3Bn.className%3D%22g2c-log-entry%22%2B(t%3F%22%20%22%2Bt%3A%22%22)%2Cn.textContent%3De%2Ci.appendChild(n)%2Ci.scrollTop%3Di.scrollHeight%7Dfunction%20c(e%2Ct%2Cn)%7Be.className%3D%22g2c-btn%20%22%2Bt%3Bvar%20a%3De.querySelector(%22.g2c-btn-icon%22)%3B%22running%22%3D%3D%3Dt%3Fa.innerHTML%3D'%3Cdiv%20class%3D%22g2c-spinner%22%3E%3C%2Fdiv%3E'%3A%22done%22%3D%3D%3Dt%3Fa.textContent%3D%22%E2%9C%85%22%3A%22error%22%3D%3D%3Dt%26%26(a.textContent%3D%22%E2%9D%8C%22)%2Cn%26%26(e.querySelector(%22.g2c-btn-sub%22).textContent%3Dn)%7Dfunction%20l(e%2Ct%2Cn)%7Bvar%20a%3Dnew%20Blob(%5Be%5D%2C%7Btype%3An%7C%7C%22text%2Fplain%22%7D)%2Co%3DURL.createObjectURL(a)%2Cr%3Ddocument.createElement(%22a%22)%3Br.href%3Do%2Cr.download%3Dt%2Cdocument.body.appendChild(r)%2Cr.click()%2Cdocument.body.removeChild(r)%2CURL.revokeObjectURL(o)%2Cs(%22Downloaded%3A%20%22%2Bt%2C%22success%22)%7Dfunction%20d(e%2Ct%2Cn)%7Bvar%20a%3Ddocument.getElementById(e)%3Breturn%20a%3Fa.addEventListener(t%2Cn)%3As(%22Warning%3A%20element%20%23%22%2Be%2B%22%20not%20found%22%2C%22error%22)%2Ca%7Dvar%20g%3Dnull%3Basync%20function%20p()%7Bif(g)return%20g%3Bs(%22Authenticating...%22)%3Bvar%20e%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fapi%2Fauth%2Fsession%22%2C%7Bcredentials%3A%22include%22%7D)%3Bif(200!%3D%3De.status)throw%20new%20Error(%22Auth%20failed%20(HTTP%20%22%2Be.status%2B%22).%20Are%20you%20logged%20in%3F%22)%3Bvar%20t%3Dawait%20e.json()%3Bif(!t.accessToken)throw%20new%20Error(%22No%20token%20found.%20Please%20refresh%20chatgpt.com%20and%20try%20again.%22)%3Breturn%20g%3Dt.accessToken%2Cs(%22Authenticated%20OK%22)%2Casync%20function(e)%7Bif(u)return%20u%3Btry%7Bvar%20t%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Faccounts%2Fcheck%2Fv4-2023-04-27%22%2C%7Bcredentials%3A%22include%22%2Cheaders%3A%7BAuthorization%3A%22Bearer%20%22%2Be%7D%7D)%3Bif(200!%3D%3Dt.status)return%20s(%22Account%20check%3A%20HTTP%20%22%2Bt.status)%2Cnull%3Bvar%20n%3D(await%20t.json()).accounts%7C%7C%7B%7D%2Ca%3DObject.keys(n).filter(function(e)%7Breturn%22default%22!%3D%3De%7D)%3Bif(0%3D%3D%3Da.length)return%20null%3Bvar%20o%3Dn%5Ba%5B0%5D%5D%2Cr%3Do.account%7C%7C%7B%7D%2Ci%3D(u%3D%7Baccount_id%3Ar.account_id%7C%7Ca%5B0%5D%2Cplan_type%3Ar.plan_type%7C%7C%22unknown%22%2Cstructure%3Ar.structure%7C%7C%22unknown%22%2Cworkspace_type%3Ar.workspace_type%7C%7Cnull%2Corganization_id%3Ar.organization_id%7C%7Cnull%2Cis_hipaa%3Ar.is_hipaa_compliant_workspace%7C%7C!1%2Cfeatures%3Ao.features%7C%7C%5B%5D%7D).plan_type.charAt(0).toUpperCase()%2Bu.plan_type.slice(1)%2Cc%3D%22personal%22%3D%3D%3Du.structure%3F%22personal%22%3Au.structure%3Breturn%20u.workspace_type%26%26(c%2B%3D%22%2F%22%2Bu.workspace_type)%2Cs(%22Account%3A%20%22%2Bi%2B%22%20(%22%2Bc%2B%22)%22)%2C%22personal%22!%3D%3Du.structure%26%26u.workspace_type%26%26s(%22Workspace%20detected%3A%20%22%2Bu.workspace_type%2C%22success%22)%2Cu%7Dcatch(e)%7Breturn%20s(%22Account%20detection%3A%20%22%2Be.message)%2Cnull%7D%7D(g)%2Cg%7Dvar%20u%3Dnull%3Bfunction%20m(e)%7Breturn%20e.default_model_slug%7C%7Ce.model%7C%7Ce.model_slug%7C%7Ce.gpt_model%7C%7C%22unknown%22%7Dfunction%20h(e)%7Bvar%20t%3De.update_time%7C%7Ce.updated_at%7C%7Ce.create_time%7C%7Ce.created_at%7C%7C0%3Bif(!t)return%200%3Bif(%22string%22%3D%3Dtypeof%20t)%7Bvar%20n%3Dnew%20Date(t).getTime()%2F1e3%3Breturn%20isNaN(n)%3F0%3An%7Dreturn%20t%3E1e12%3Ft%2F1e3%3At%7Dasync%20function%20v()%7Bvar%20e%3Ddocument.getElementById(%22g2c-btn-memory%22)%3Bc(e%2C%22running%22%2C%22Exporting...%22)%3Btry%7Bvar%20t%3Dawait%20p()%3Bs(%22Fetching%20memories...%22)%3Bvar%20n%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fmemories%3Finclude_memory_entries%3Dtrue%22%2C%7Bcredentials%3A%22include%22%2Cheaders%3A%7BAuthorization%3A%22Bearer%20%22%2Bt%7D%7D)%3Bif(200!%3D%3Dn.status)throw%20new%20Error(%22Could%20not%20fetch%20memories%20(HTTP%20%22%2Bn.status%2B%22)%22)%3Bvar%20a%3Dawait%20n.json()%2Co%3Da.memories%7C%7Ca.results%7C%7Ca%2Cr%3D%22%23%20ChatGPT%20Memory%20Export%5Cn%22%3Br%2B%3D%22%23%20Exported%3A%20%22%2B(new%20Date).toISOString()%2B%22%5Cn%22%2Cr%2B%3D%22%23%20Tool%3A%20GPT2Claude%20Migration%20Kit%20v2.7%5Cn%22%2Ca.memory_num_tokens%26%26(r%2B%3D%22%23%20Tokens%20used%3A%20%22%2Ba.memory_num_tokens%2B%22%20%2F%20%22%2B(a.memory_max_tokens%7C%7C%22%3F%22)%2B%22%5Cn%22)%2Cr%2B%3D%22%5Cn%22%3Bvar%20i%3D0%2Cd%3D0%2Cg%3D0%3Bif(Array.isArray(o))%7Bi%3Do.length%2Co.sort(function(e%2Ct)%7Breturn%22warm%22%3D%3D%3De.status%26%26%22warm%22!%3D%3Dt.status%3F-1%3A%22warm%22!%3D%3De.status%26%26%22warm%22%3D%3D%3Dt.status%3F1%3A0%7D)%3Bfor(var%20u%3D0%3Bu%3Co.length%3Bu%2B%2B)%7Bvar%20m%3Do%5Bu%5D%2Ch%3Dm.content%7C%7Cm.value%7C%7Cm.text%7C%7Cm.memory%7C%7CJSON.stringify(m)%2Cv%3Dm.status%7C%7C%22unknown%22%3B%22warm%22%3D%3D%3Dv%3Fd%2B%2B%3A%22cold%22%3D%3D%3Dv%26%26g%2B%2B%2Cr%2B%3Du%2B1%2B%22.%20%22%2Bh%2B(%22cold%22%3D%3D%3Dv%3F%22%20%5Bolder%2Fless%20relevant%5D%22%3A%22%22)%2B%22%5Cn%22%7D%7Delse%20r%2B%3DJSON.stringify(o%2Cnull%2C2)%3Bvar%20f%3Di%2B%22%20memories%20(%22%2Bd%2B%22%20active%22%2B(g%3E0%3F%22%2C%20%22%2Bg%2B%22%20older%22%3A%22%22)%2B%22)%22%3Bs(%22Found%20%22%2Bf)%2Cl(r%2C%22chatgpt_memories.md%22%2C%22text%2Fmarkdown%22)%2Cc(e%2C%22done%22%2Cf)%7Dcatch(t)%7Bs(%22Memory%20export%20failed%3A%20%22%2Bt.message%2C%22error%22)%2Cc(e%2C%22error%22%2Ct.message)%7D%7Dvar%20f%3D%5B%5D%2Cy%3D%7B%7D%2Cb%3D10%3Basync%20function%20x()%7Bvar%20e%3Ddocument.getElementById(%22g2c-btn-convos%22)%3Bc(e%2C%22running%22%2C%22Scanning...%22)%3Bvar%20t%3Ddocument.getElementById(%22g2c-progress%22)%3Bt.style.display%3D%22block%22%2C(yt%3Ddocument.getElementById(%22g2c-progress-fill%22)).classList.add(%22indeterminate%22)%2Cyt.style.width%3D%22100%25%22%3Bvar%20a%3Ddocument.createElement(%22div%22)%3Ba.className%3D%22g2c-scan-hero%22%2Ca.id%3D%22g2c-scan-hero%22%2Ca.innerHTML%3D'%3Cdiv%20class%3D%22g2c-scan-count%22%20id%3D%22g2c-scan-count%22%3E0%3C%2Fdiv%3E%3Cdiv%20class%3D%22g2c-scan-label%22%3Econversations%20found%3C%2Fdiv%3E%3Cdiv%20class%3D%22g2c-scan-status%22%20id%3D%22g2c-scan-status%22%3E%3Cspan%20class%3D%22g2c-scan-dots%22%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3C%2Fspan%3E%20Scanning%20your%20conversations%E2%80%A6%3C%2Fdiv%3E%3Cdiv%20class%3D%22g2c-scan-models%22%20id%3D%22g2c-scan-models%22%3E%3C%2Fdiv%3E%3Cdiv%20class%3D%22g2c-scan-reassure%22%3EFilter%20options%20appear%20when%20scan%20completes%3C%2Fdiv%3E'%2Ct.parentNode.insertBefore(a%2Ct.nextSibling)%3Btry%7Bvar%20o%3D%7BAuthorization%3A%22Bearer%20%22%2Bawait%20p()%7D%3Bf%3D%5B%5D%3Bvar%20r%3D0%2Ci%3D%7B%7D%3Bfor(s(%22Scanning%20conversation%20list...%22)%3B%3B)%7Bvar%20l%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fconversations%3Foffset%3D%22%2Br%2B%22%26limit%3D100%26order%3Dupdated%22%2C%7Bcredentials%3A%22include%22%2Cheaders%3Ao%7D)%3Bif(200!%3D%3Dl.status)throw%20new%20Error(%22Could%20not%20get%20conversations%20(HTTP%20%22%2Bl.status%2B%22)%22)%3Bvar%20g%3D(await%20l.json()).items%7C%7C%5B%5D%3Bif(s(%22Batch%3A%20%22%2Bg.length%2B%22%20conversations%20(offset%20%22%2Br%2B%22)%22)%2C0%3D%3D%3Dr%26%26g.length%3E0)%7Bs(%22API%20fields%3A%20%22%2BObject.keys(g%5B0%5D).join(%22%2C%20%22))%3Bvar%20u%3Dg%5B0%5D%3Bs(%22Sample%20model%3A%20%22%2B(u.default_model_slug%7C%7Cu.model%7C%7Cu.model_slug%7C%7C%22null%22))%2Cs(%22Sample%20time%3A%20update%3D%22%2Bu.update_time%2B%22%20create%3D%22%2Bu.create_time)%2Cs(%22Sample%20gizmo%3A%20%22%2B(u.gizmo_id%7C%7Cu.conversation_template_id%7C%7Cu.workspace_id%7C%7C%22none%22))%7Dfor(var%20v%3D0%3Bv%3Cg.length%3Bv%2B%2B)%7Bf.push(g%5Bv%5D)%3Bvar%20y%3Dm(g%5Bv%5D)%3Bi%5By%5D%3D(i%5By%5D%7C%7C0)%2B1%7Dvar%20b%3Ddocument.getElementById(%22g2c-scan-count%22)%2Cx%3Ddocument.getElementById(%22g2c-scan-status%22)%3Bb%26%26(b.textContent%3Df.length.toLocaleString())%2Cx%26%26(x.innerHTML%3Dg.length%3E%3D100%3F'%3Cspan%20class%3D%22g2c-scan-dots%22%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3C%2Fspan%3E%20Still%20scanning%20%E2%80%94%20this%20takes%20a%20minute%2C%20all%20good'%3A%22Scan%20complete!%22)%3Bfor(var%20_%3D%22%22%2CT%3DObject.keys(i).sort(function(e%2Ct)%7Breturn%20i%5Bt%5D-i%5Be%5D%7D)%2CC%3D0%3BC%3CT.length%3BC%2B%2B)_%2B%3D'%3Cspan%20class%3D%22g2c-scan-tag%22%3E'%2BT%5BC%5D%2B%22%20(%22%2Bi%5BT%5BC%5D%5D%2B%22)%3C%2Fspan%3E%22%3Bvar%20j%3Ddocument.getElementById(%22g2c-scan-models%22)%3Bif(j%26%26(j.innerHTML%3D_)%2Cr%2B%3Dg.length%2Cg.length%3C100)break%3Bawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7Ds(%22Total%20conversations%3A%20%22%2Bf.length)%3Btry%7Bs(%22Checking%20for%20projects...%22)%2C(x%3Ddocument.getElementById(%22g2c-scan-status%22))%26%26(x.innerHTML%3D'%3Cspan%20class%3D%22g2c-scan-dots%22%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3C%2Fspan%3E%20Checking%20projects%E2%80%A6')%3Bfor(var%20B%3D%7B%7D%2CI%3D%5B%5D%2CS%3D0%2CA%3D0%3BA%3Cf.length%3BA%2B%2B)%7Bvar%20z%3Df%5BA%5D.gizmo_id%7C%7Cf%5BA%5D.conversation_template_id%7C%7Cf%5BA%5D.workspace_id%7C%7Cnull%3Bz%26%260%3D%3D%3Dz.indexOf(%22g-p-%22)%26%26!B%5Bz%5D%26%26(B%5Bz%5D%3Dnull%2CS%2B%2B)%7DS%3E0%26%26I.push(%22conversation%20scan%22)%3Bvar%20O%3D0%3Btry%7Bvar%20L%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fprojects%22%2C%7Bcredentials%3A%22include%22%2Cheaders%3Ao%7D)%3Bif(200%3D%3D%3DL.status)%7Bvar%20M%3Dawait%20L.json()%2CH%3DM.items%7C%7CM.projects%7C%7CM.list%7C%7C%5B%5D%3Bif(Array.isArray(H))%7Bfor(var%20N%3D0%2CD%3D0%3BD%3CH.length%3BD%2B%2B)%7Bvar%20F%3DH%5BD%5D.resource%7C%7CH%5BD%5D.gizmo%7C%7CH%5BD%5D%2CR%3DF.id%7C%7CF.gizmo_id%7C%7CF.short_url%7C%7C%22%22%3Bif(0%3D%3D%3DR.indexOf(%22g-p-%22)%26%26!B%5BR%5D)%7Bvar%20q%3DF.display%26%26F.display.name%7C%7CF.name%7C%7CF.title%7C%7Cnull%3BB%5BR%5D%3Dq%2CN%2B%2B%7D%7DN%3E0%26%26I.push(%22%2Fprojects%20API%22)%7D%7Delse%20404%3D%3D%3DL.status%26%26O%2B%2B%2Cs(%22%2Fprojects%20API%3A%20HTTP%20%22%2BL.status)%7Dcatch(e)%7Bs(%22%2Fprojects%20API%20failed%3A%20%22%2Be.message)%7Dtry%7Bvar%20U%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fgizmos%2Fdiscovery%2Fmine%22%2C%7Bcredentials%3A%22include%22%2Cheaders%3Ao%7D)%3Bif(200%3D%3D%3DU.status)%7Bvar%20G%3Dawait%20U.json()%2CK%3DG.list%7C%7CG.items%7C%7CG.gizmos%7C%7C%5B%5D%3Bif(Array.isArray(K))%7Bfor(var%20Y%3D0%2CX%3D0%3BX%3CK.length%3BX%2B%2B)%7Bvar%20J%3DK%5BX%5D.resource%7C%7CK%5BX%5D.gizmo%7C%7CK%5BX%5D%2CW%3DJ.id%7C%7CJ.short_url%7C%7C%22%22%3Bif((0%3D%3D%3DW.indexOf(%22g-p-%22)%7C%7CJ.type%26%26%22project%22%3D%3D%3DJ.type)%26%26!B%5BW%5D)%7Bvar%20V%3DJ.display%26%26J.display.name%7C%7CJ.name%7C%7CJ.title%7C%7Cnull%3BB%5BW%5D%3DV%2CY%2B%2B%7D%7DY%3E0%26%26I.push(%22%2Fgizmos%20API%22)%7D%7Delse%20404%3D%3D%3DU.status%26%26O%2B%2B%2Cs(%22%2Fgizmos%20API%3A%20HTTP%20%22%2BU.status)%7Dcatch(e)%7Bs(%22%2Fgizmos%20API%20failed%3A%20%22%2Be.message)%7DO%3E%3D2%26%26s(%22%E2%9A%A0%EF%B8%8F%20Both%20project%20API%20endpoints%20returned%20404%20%E2%80%94%20relying%20on%20DOM%2Fconversation%20discovery%22%2C%22warn%22)%3Bfor(var%20Q%3D0%2CZ%3D%5B'a%5Bhref*%3D%22%2Fg%2Fg-p-%22%5D'%2C'a%5Bhref*%3D%22%2Fproject%2F%22%5D'%2C'nav%20a%5Bhref*%3D%22g-p-%22%5D'%2C'%5Bdata-testid*%3D%22project%22%5D%20a'%2C'li%20a%5Bhref*%3D%22g-p-%22%5D'%5D%2C%24%3D%7B%7D%2Cee%3D0%3Bee%3CZ.length%3Bee%2B%2B)try%7Bfor(var%20te%3Ddocument.querySelectorAll(Z%5Bee%5D)%2Cne%3D0%3Bne%3Cte.length%3Bne%2B%2B)%7Bvar%20ae%3Dte%5Bne%5D.getAttribute(%22href%22)%7C%7C%22%22%2Coe%3Dae.match(%2Fg-p-%5Ba-f0-9%5D%2B%2F)%3Bif(oe)%7Bvar%20re%3Doe%5B0%5D%3Bif(!(%24%5Bre%5D%7C%7CB%5Bre%5D%7C%7Cae.indexOf(%22%2Fc%2F%22)%3E-1))%7Bvar%20ie%3Dae.match(%2Fg-p-%5Ba-f0-9%5D%2B-(%5B%5E%2F%5D%2B)%2F)%2Cse%3Dte%5Bne%5D.textContent.trim()%7C%7C(ie%3Fie%5B1%5D.replace(%2F-%2Fg%2C%22%20%22)%3Anull)%3BB%5Bre%5D%3Dse%2C%24%5Bre%5D%3D!0%2CQ%2B%2B%7D%7D%7D%7Dcatch(e)%7B%7Dif(0%3D%3D%3DQ)try%7Bfor(var%20ce%3Ddocument.querySelectorAll(%22a%5Bhref%5D%22)%2Cle%3D0%3Ble%3Cce.length%3Ble%2B%2B)%7Bvar%20de%3Dce%5Ble%5D.getAttribute(%22href%22)%7C%7C%22%22%3Bif(-1!%3D%3Dde.indexOf(%22g-p-%22))%7Bvar%20ge%3Dde.match(%2Fg-p-%5Ba-f0-9%5D%2B%2F)%3Bif(ge)%7Bvar%20pe%3Dge%5B0%5D%3Bif(!(%24%5Bpe%5D%7C%7CB%5Bpe%5D%7C%7Cde.indexOf(%22%2Fc%2F%22)%3E-1))%7Bvar%20ue%3Dde.match(%2Fg-p-%5Ba-f0-9%5D%2B-(%5B%5E%2F%5D%2B)%2F)%2Cme%3Dce%5Ble%5D.textContent.trim()%7C%7C(ue%3Fue%5B1%5D.replace(%2F-%2Fg%2C%22%20%22)%3Anull)%3BB%5Bpe%5D%3Dme%2C%24%5Bpe%5D%3D!0%2CQ%2B%2B%7D%7D%7D%7D%7Dcatch(e)%7B%7DQ%3E0%26%26I.push(%22DOM%22)%3Bvar%20he%3D0%3Btry%7Bvar%20ve%3Ddocument.getElementById(%22__NEXT_DATA__%22)%3Bif(ve)%7Bvar%20fe%3D(ve.textContent%7C%7Cve.innerText%7C%7C%22%22).match(%2Fg-p-%5Ba-f0-9%5D%2B%2Fg)%3Bif(fe)%7Bfor(var%20ye%3D%7B%7D%2Cbe%3D0%3Bbe%3Cfe.length%3Bbe%2B%2B)%7Bvar%20xe%3Dfe%5Bbe%5D%3Bye%5Bxe%5D%7C%7CB%5Bxe%5D%7C%7C(ye%5Bxe%5D%3D!0%2CB%5Bxe%5D%3Dnull%2Che%2B%2B)%7Dhe%3E0%26%26I.push(%22__NEXT_DATA__%22)%7D%7D%7Dcatch(e)%7B%7Dvar%20we%3DObject.keys(B)%3Bif(we.length%3E0)%7Bs(%22Found%20%22%2Bwe.length%2B%22%20project(s)%20via%20%22%2B(I.length%3E0%3FI.join(%22%20%2B%20%22)%3A%22unknown%22))%3Bfor(var%20_e%3D%7B%7D%2Cke%3D0%3Bke%3Cf.length%3Bke%2B%2B)_e%5Bf%5Bke%5D.id%5D%3Dke%3Bfor(var%20Ee%3D0%2CTe%3D0%3BTe%3Cwe.length%3BTe%2B%2B)%7Bvar%20Ce%3Dwe%5BTe%5D%2Cje%3DB%5BCe%5D%3Bif(!je)%7Btry%7Bvar%20Be%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fgizmos%2F%22%2BCe%2C%7Bcredentials%3A%22include%22%2Cheaders%3Ao%7D)%3Bif(200%3D%3D%3DBe.status)%7Bvar%20Ie%3Dawait%20Be.json()%2CSe%3DIe.gizmo%7C%7CIe%3Bs(%22Resolved%20project%20name%3A%20%22%2B(je%3DSe.display%26%26Se.display.name%7C%7CSe.name%7C%7CSe.title%7C%7C%22Project%22))%7D%7Dcatch(e)%7Bje%3D%22Project%22%7DB%5BCe%5D%3Dje%7Ds(%22Fetching%20project%3A%20%22%2Bje%2B%22%20(%22%2BCe%2B%22)%22)%2C(x%3Ddocument.getElementById(%22g2c-scan-status%22))%26%26(x.innerHTML%3D'%3Cspan%20class%3D%22g2c-scan-dots%22%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3C%2Fspan%3E%20Scanning%20project%3A%20'%2Bje%2B%22%E2%80%A6%22)%3Bfor(var%20Ae%3D0%2Cze%3D0%2CPe%3D0%3B%3B)%7Bvar%20Oe%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fgizmos%2F%22%2BCe%2B%22%2Fconversations%3Fcursor%3D%22%2BAe%2C%7Bcredentials%3A%22include%22%2Cheaders%3Ao%7D)%3Bif(200!%3D%3DOe.status)%7Bs(%22Project%20%22%2Bje%2B%22%3A%20HTTP%20%22%2BOe.status%2C%22error%22)%3Bbreak%7Dfor(var%20Le%3Dawait%20Oe.json()%2CMe%3DLe.items%7C%7C%5B%5D%2CHe%3D0%3BHe%3CMe.length%3BHe%2B%2B)%7BMe%5BHe%5D._project%3Dje%2CMe%5BHe%5D._project_id%3DCe%3Bvar%20Ne%3DMe%5BHe%5D.gizmo_id%7C%7Cnull%3Bif(Ne%26%260%3D%3D%3DNe.indexOf(%22g-p-%22)%26%26!B%5BNe%5D%26%26(B%5BNe%5D%3Dnull%2Cwe.push(Ne)%2Cs(%22Cross-discovered%20project%3A%20%22%2BNe))%2Cvoid%200%3D%3D%3D_e%5BMe%5BHe%5D.id%5D)f.push(Me%5BHe%5D)%2C_e%5BMe%5BHe%5D.id%5D%3Df.length-1%2Cze%2B%2B%3Belse%7Bvar%20De%3D_e%5BMe%5BHe%5D.id%5D%3Bf%5BDe%5D._project%3Dje%2Cf%5BDe%5D._project_id%3DCe%2CPe%2B%2B%7D%7Dif((b%3Ddocument.getElementById(%22g2c-scan-count%22))%26%26(b.textContent%3Df.length.toLocaleString())%2Cnull%3D%3D%3DLe.cursor%7C%7Cvoid%200%3D%3D%3DLe.cursor%7C%7C0%3D%3D%3DMe.length)break%3BAe%3DLe.cursor%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7Ds(%22Project%20%22%2Bje%2B%22%3A%20%22%2Bze%2B%22%20new%2C%20%22%2BPe%2B%22%20tagged%22)%2CEe%2B%3Dze%7Ds(%22Projects%20total%3A%20%22%2BEe%2B%22%20new%20conversations%20from%20%22%2Bwe.length%2B%22%20project(s)%22)%2Cs(%22Total%20with%20projects%3A%20%22%2Bf.length)%7Delse%7Bfor(var%20Fe%3D!1%2CRe%3D0%3BRe%3Cf.length%3BRe%2B%2B)if(f%5BRe%5D.gizmo_id%26%260%3D%3D%3Df%5BRe%5D.gizmo_id.indexOf(%22g-p-%22))%7BFe%3D!0%3Bbreak%7Ds(Fe%3F%22No%20projects%20discovered%2C%20but%20conversations%20contain%20project%20references.%20Try%20scrolling%20sidebar%20to%20load%20projects%20into%20DOM%2C%20then%20re-scan.%22%3A%22No%20projects%20found%22)%7D%7Dcatch(e)%7Bs(%22Projects%20check%20failed%3A%20%22%2Be.message%2B%22%20(continuing%20without)%22)%7Dtry%7Bs(%22Checking%20shared%20conversations...%22)%2C(x%3Ddocument.getElementById(%22g2c-scan-status%22))%26%26(x.innerHTML%3D'%3Cspan%20class%3D%22g2c-scan-dots%22%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3C%2Fspan%3E%20Checking%20shared%20conversations%E2%80%A6')%3Bvar%20qe%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fshared_conversations%3Forder%3Dupdated%26limit%3D100%26offset%3D0%22%2C%7Bcredentials%3A%22include%22%2Cheaders%3Ao%7D)%3Bif(200%3D%3D%3Dqe.status)%7Bvar%20Ue%3D(await%20qe.json()).items%7C%7C%5B%5D%2CGe%3DUe.length%3Bs(%22Shared%3A%20%22%2BUe.length%2B%22%20fetched%20(page%201)%22)%3Bfor(var%20Ke%3DUe.length%2CYe%3D1%2CXe%3D%7B%7D%2CJe%3D0%3BJe%3CUe.length%3BJe%2B%2B)Xe%5BUe%5BJe%5D.id%5D%3D!0%3Bfor(%3BGe%3E%3D100%26%26Ye%3C50%3B)%7Bx%26%26(x.innerHTML%3D'%3Cspan%20class%3D%22g2c-scan-dots%22%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3C%2Fspan%3E%20Shared%3A%20'%2BUe.length%2B%22%20fetched%E2%80%A6%22)%3Bvar%20We%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fshared_conversations%3Forder%3Dupdated%26limit%3D100%26offset%3D%22%2BKe%2C%7Bcredentials%3A%22include%22%2Cheaders%3Ao%7D)%3Bif(200!%3D%3DWe.status)%7Bs(%22Shared%20page%20HTTP%20%22%2BWe.status%2B%22%20%E2%80%94%20stopping%20pagination%22)%3Bbreak%7Dvar%20Ve%3D(await%20We.json()).items%7C%7C%5B%5D%3Bif(Ge%3DVe.length%2C0%3D%3D%3DVe.length)break%3Bvar%20Qe%3D0%3Bfor(C%3D0%3BC%3CVe.length%3BC%2B%2B)Xe%5BVe%5BC%5D.id%5D%3FQe%2B%2B%3A(Xe%5BVe%5BC%5D.id%5D%3D!0%2CUe.push(Ve%5BC%5D))%3Bif(Ke%2B%3DVe.length%2CYe%2B%2B%2CQe%3E.5*Ve.length)%7Bs(%22Shared%3A%20API%20returning%20duplicate%20items%20(%22%2BQe%2B%22%2F%22%2BVe.length%2B%22%20dupes)%20%E2%80%94%20stopping%22)%3Bbreak%7Ds(%22Shared%3A%20%22%2BUe.length%2B%22%20unique%20fetched%20(page%20%22%2BYe%2B%22)%22)%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7DYe%3E%3D50%26%26s(%22Shared%3A%20hit%2050%20page%20cap%20%E2%80%94%20stopping%20(%22%2BUe.length%2B%22%20items)%22)%3Bvar%20Ze%3D%7B%7D%3Bfor(ke%3D0%3Bke%3Cf.length%3Bke%2B%2B)Ze%5Bf%5Bke%5D.id%5D%3Dke%3Bfor(var%20%24e%3D0%2Cet%3D0%2Ctt%3D0%3Btt%3CUe.length%3Btt%2B%2B)%7Bvar%20nt%3DUe%5Btt%5D%2Cat%3Dnt.conversation_id%7C%7Cnt.id%3Bif(void%200!%3D%3DZe%5Bat%5D)%7Bvar%20ot%3DZe%5Bat%5D%3Bf%5Bot%5D._also_shared%3D!0%2Cf%5Bot%5D._share_id%3Dnt.share_id%7C%7Cnt.id%2Cet%2B%2B%7Delse%20nt._shared%3D!0%2Cnt._share_id%3Dnt.share_id%7C%7Cnt.id%2Cnt.title%7C%7C(nt.title%3Dnt.title%7C%7C%22Shared%20conversation%22)%2Cf.push(nt)%2C%24e%2B%2B%7DUe.length%3E0%3Fs(%22Shared%20conversations%3A%20%22%2BUe.length%2B%22%20found%20(%22%2B%24e%2B%22%20unique%2C%20%22%2Bet%2B%22%20already%20in%20main)%22)%3As(%22No%20shared%20conversations%22)%2C(b%3Ddocument.getElementById(%22g2c-scan-count%22))%26%26(b.textContent%3Df.length.toLocaleString())%7Delse%20404!%3D%3Dqe.status%3Fs(%22Shared%20conversations%3A%20HTTP%20%22%2Bqe.status%2B%22%20(skipped)%22)%3As(%22No%20shared%20conversations%22)%7Dcatch(e)%7Bs(%22Shared%20conversations%20check%3A%20%22%2Be.message%2B%22%20(continuing%20without)%22)%7Dtry%7Bs(%22Checking%20archived%20conversations...%22)%2C(x%3Ddocument.getElementById(%22g2c-scan-status%22))%26%26(x.innerHTML%3D'%3Cspan%20class%3D%22g2c-scan-dots%22%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3C%2Fspan%3E%20Checking%20archived%20conversations%E2%80%A6')%3Bfor(var%20rt%3D%5B%5D%2Cit%3D0%2Cst%3D0%3B%3B)%7Bst%2B%2B%3Bvar%20ct%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fconversations%3Fis_archived%3Dtrue%26limit%3D100%26offset%3D%22%2Bit%2C%7Bcredentials%3A%22include%22%2Cheaders%3Ao%7D)%3Bif(200!%3D%3Dct.status)%7B1%3D%3D%3Dst%26%26s(%22Archived%20conversations%3A%20HTTP%20%22%2Bct.status%2B%22%20(skipped)%22)%3Bbreak%7Dvar%20lt%3D(await%20ct.json()).items%7C%7C%5B%5D%3Bif(0%3D%3D%3Dlt.length)break%3Bfor(var%20dt%3D0%3Bdt%3Clt.length%3Bdt%2B%2B)lt%5Bdt%5D._archived%3D!0%2Crt.push(lt%5Bdt%5D)%3Bif(x%26%26(x.innerHTML%3D'%3Cspan%20class%3D%22g2c-scan-dots%22%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3Cspan%3E%3C%2Fspan%3E%3C%2Fspan%3E%20Archived%3A%20'%2Brt.length%2B%22%20fetched%E2%80%A6%22)%2Cs(%22Archived%3A%20%22%2Brt.length%2B%22%20fetched%20(page%20%22%2Bst%2B%22)%22)%2Clt.length%3C100)break%3Bit%2B%3Dlt.length%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7Dif(rt.length%3E0)%7Bfor(var%20gt%3D%7B%7D%2Cpt%3D0%3Bpt%3Cf.length%3Bpt%2B%2B)gt%5Bf%5Bpt%5D.id%5D%3Dpt%3Bfor(var%20ut%3D0%2Cmt%3D0%2Cht%3D0%3Bht%3Crt.length%3Bht%2B%2B)%7Bvar%20vt%3Drt%5Bht%5D%3Bif(void%200!%3D%3Dgt%5Bvt.id%5D)%7Bvar%20ft%3Dgt%5Bvt.id%5D%3Bf%5Bft%5D._archived%3D!0%2Cmt%2B%2B%7Delse%20f.push(vt)%2Cut%2B%2B%7Ds(%22Archived%20conversations%3A%20%22%2Brt.length%2B%22%20found%20(%22%2But%2B%22%20new%2C%20%22%2Bmt%2B%22%20already%20in%20main)%22)%2C(b%3Ddocument.getElementById(%22g2c-scan-count%22))%26%26(b.textContent%3Df.length.toLocaleString())%7Delse%20s(%22No%20archived%20conversations%22)%7Dcatch(e)%7Bs(%22Archived%20conversations%20check%3A%20%22%2Be.message%2B%22%20(continuing%20without)%22)%7Dc(e%2C%22done%22%2Cf.length%2B%22%20conversations%20found%22)%3Bvar%20yt%2Cbt%3Ddocument.getElementById(%22g2c-scan-hero%22)%3Bbt%26%26bt.parentNode.removeChild(bt)%2C(yt%3Ddocument.getElementById(%22g2c-progress-fill%22)).classList.remove(%22indeterminate%22)%2Cyt.style.width%3D%220%25%22%2Cdocument.getElementById(%22g2c-progress%22).style.display%3D%22none%22%2Cfunction()%7Bfor(var%20e%3D%7B%7D%2Ct%3D1%2F0%2Ca%3D0%2Co%3D%7B%7D%2Cr%3D0%3Br%3Cf.length%3Br%2B%2B)%7Bvar%20i%3Df%5Br%5D%2Cc%3Dm(i)%3Be%5Bc%5D%3D(e%5Bc%5D%7C%7C0)%2B1%3Bvar%20l%3Dh(i)%3Bl%3E0%26%26l%3Ct%26%26(t%3Dl)%2Cl%3E0%26%26l%3Ea%26%26(a%3Dl)%3Bvar%20g%3Di._archived%3F%22Archived%22%3Ai._shared%3F%22Shared%20conversations%22%3Ai._project%7C%7C%22Main%20conversations%22%3Bo%5Bg%5D%3D(o%5Bg%5D%7C%7C0)%2B1%7Dvar%20p%3DObject.keys(e).sort(function(t%2Cn)%7Breturn%20e%5Bn%5D-e%5Bt%5D%7D)%3Bfunction%20u(e)%7Bif(!e%7C%7Ce%3D%3D%3D1%2F0)return%22%22%3Bif(%22string%22%3D%3Dtypeof%20e)%7Bvar%20t%3Dnew%20Date(e)%3Breturn%20isNaN(t.getTime())%3F%22%22%3At.toISOString().slice(0%2C10)%7Dt%3Dnew%20Date(e%3E1e12%3Fe%3A1e3*e)%3Breturn%20isNaN(t.getTime())%3F%22%22%3At.toISOString().slice(0%2C10)%7Dvar%20v%3D%22%22%3Bfor(r%3D0%3Br%3Cp.length%3Br%2B%2B)%7Bvar%20y%3Dp%5Br%5D%3Bv%2B%3D'%3Clabel%20class%3D%22g2c-model-row%22%3E%3Cinput%20type%3D%22checkbox%22%20checked%20data-model%3D%22'%2By%2B'%22%3E%20'%2By%2B'%3Cspan%20class%3D%22cnt%22%3E'%2Be%5By%5D%2B%22%3C%2Fspan%3E%3C%2Flabel%3E%22%7Dfor(var%20b%3DObject.keys(o).sort(function(e%2Ct)%7Breturn%22Main%20conversations%22%3D%3D%3De%3F-1%3A%22Main%20conversations%22%3D%3D%3Dt%7C%7C%22Archived%22%3D%3D%3De%3F1%3A%22Archived%22%3D%3D%3Dt%3F-1%3Ao%5Bt%5D-o%5Be%5D%7D)%2Cx%3D%22%22%2C_%3Db.length%3E1%2CT%3D0%3BT%3Cb.length%3BT%2B%2B)%7Bvar%20C%3Db%5BT%5D%3Bx%2B%3D'%3Clabel%20class%3D%22g2c-model-row%22%3E%3Cinput%20type%3D%22checkbox%22%20checked%20data-source%3D%22'%2BC%2B'%22%3E%20'%2B(%22Main%20conversations%22%3D%3D%3DC%3F%22%F0%9F%92%AC%22%3A%22Shared%20conversations%22%3D%3D%3DC%3F%22%F0%9F%94%97%22%3A%22Archived%22%3D%3D%3DC%3F%22%F0%9F%93%A6%22%3A%22%F0%9F%93%81%22)%2B%22%20%22%2BC%2B'%3Cspan%20class%3D%22cnt%22%3E'%2Bo%5BC%5D%2B%22%3C%2Fspan%3E%3C%2Flabel%3E%22%7Dfor(var%20j%3D0%2CB%3Df.filter(function(e)%7Breturn%20e._project%7D).length%2CI%3Df.filter(function(e)%7Breturn%20e._archived%7D).length%2CS%3Df.filter(function(e)%7Breturn%20e._shared%7D).length%2CA%3D0%3BA%3Cb.length%3BA%2B%2B)%22Main%20conversations%22!%3D%3Db%5BA%5D%26%26%22Shared%20conversations%22!%3D%3Db%5BA%5D%26%26%22Archived%22!%3D%3Db%5BA%5D%26%26j%2B%2B%3Bvar%20z%3Df.length-B-I-S%2CO%3Df.length.toLocaleString()%2B'%3C%2Fspan%3E%3Cspan%20style%3D%22font-size%3A12px%3Bcolor%3A%23888%3B%22%3E%20conversations%20scanned%3C%2Fspan%3E'%2CL%3D%5B%5D%3Bz%3E0%26%26L.push(z.toLocaleString()%2B%22%20main%22)%3BI%3E0%26%26L.push(I%2B%22%20archived%22)%3BB%3E0%26%26L.push(B%2B%22%20from%20%22%2Bj%2B%22%20project%22%2B(j%3E1%3F%22s%22%3A%22%22))%3BS%3E0%26%26L.push(S%2B%22%20shared%22)%3BL.length%3E1%26%26(O%2B%3D'%3Cdiv%20style%3D%22font-size%3A11px%3Bcolor%3A%237eb8a0%3Bmargin-top%3A4px%3B%22%3E'%2BL.join(%22%20%2B%20%22)%2B%22%3C%2Fdiv%3E%22)%3Bvar%20M%3D'%3Cdiv%20style%3D%22text-align%3Acenter%3Bmargin-bottom%3A14px%3B%22%3E%3Cspan%20style%3D%22font-size%3A28px%3Bfont-weight%3A800%3Bcolor%3A%237eb8a0%3B%22%3E'%2BO%2B%22%3C%2Fdiv%3E%22%2CH%3Dp.length%3E1%7C%7C1%3D%3D%3Dp.length%26%26%22unknown%22!%3D%3Dp%5B0%5D%2CN%3D%22%22%3BH%26%26(N%3D'%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-section%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-label%22%3EModels%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-models%22%20id%3D%22g2c-filter-models%22%3E'%2Bv%2B'%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-select-btns%22%3E%3Cbutton%20id%3D%22g2c-sel-all%22%3ESelect%20all%3C%2Fbutton%3E%20%C2%B7%20%3Cbutton%20id%3D%22g2c-sel-none%22%3ESelect%20none%3C%2Fbutton%3E%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E')%3Bvar%20D%3D'%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-panel%22%20id%3D%22g2c-filter-panel%22%3E%20%20%20%20%20%20%20%20'%2BM%2B'%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-section%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-label%22%3ESearch%20conversations%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cinput%20type%3D%22text%22%20class%3D%22g2c-filter-input%22%20id%3D%22g2c-search%22%20placeholder%3D%22Filter%20by%20title%E2%80%A6%22%20style%3D%22width%3A100%25%3B%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20style%3D%22font-size%3A10px%3Bcolor%3A%23555%3Bmargin-top%3A3px%3B%22%3EFilters%20by%20conversation%20title.%20Leave%20empty%20%3D%20all.%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20'%2B(_%3F'%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-section%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-label%22%3ESource%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-models%22%20id%3D%22g2c-filter-sources%22%3E'%2Bx%2B%22%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%22%3A%22%22)%2B%22%20%20%20%20%20%20%20%20%22%2BN%2B'%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-section%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-label%22%3EDate%20range%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-row%22%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cinput%20type%3D%22date%22%20class%3D%22g2c-filter-input%22%20id%3D%22g2c-date-from%22%20value%3D%22'%2Bu(t)%2B'%22%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20style%3D%22color%3A%23555%3B%22%3E%E2%86%92%3C%2Fspan%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cinput%20type%3D%22date%22%20class%3D%22g2c-filter-input%22%20id%3D%22g2c-date-to%22%20value%3D%22'%2Bu(a)%2B'%22%3E%20%20%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-select-btns%22%20id%3D%22g2c-era-btns%22%20style%3D%22flex-wrap%3Awrap%3Bmargin-top%3A4px%3B%22%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20data-era%3D%22all%22%3EAll%3C%2Fbutton%3E%20%C2%B7%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20data-era%3D%22gpt35%22%3EGPT-3.5%3C%2Fbutton%3E%20%C2%B7%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20data-era%3D%22gpt4%22%3EGPT-4%3C%2Fbutton%3E%20%C2%B7%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20data-era%3D%22gpt4o%22%3EGPT-4o%3C%2Fbutton%3E%20%C2%B7%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20data-era%3D%22gpt5%22%3EGPT-5%2B%3C%2Fbutton%3E%20%20%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-section%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-label%22%3EMax%20conversations%20(0%20%3D%20all)%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cinput%20type%3D%22number%22%20class%3D%22g2c-filter-input%22%20id%3D%22g2c-limit%22%20value%3D%220%22%20min%3D%220%22%20style%3D%22width%3A100%25%3B%22%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-section%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-label%22%3EIncremental%20export%20(skip%20already%20exported)%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-drop%22%20id%3D%22g2c-prev-drop%22%3EDrop%20or%20click%20to%20load%20previous%20export%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cinput%20type%3D%22file%22%20id%3D%22g2c-prev-file%22%20accept%3D%22.json%22%20style%3D%22display%3Anone%3B%22%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-filter-summary%22%20id%3D%22g2c-filter-summary%22%3E'%2Bf.length%2B'%20conversations%20selected%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cbutton%20class%3D%22g2c-btn%22%20id%3D%22g2c-btn-download%22%20style%3D%22border-color%3A%23d4a574%3Bmargin-bottom%3A0%3B%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-icon%22%3E%F0%9F%93%A5%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-text%22%3E%3Cspan%20style%3D%22color%3A%23d4a574%3B%22%3EDownload%20'%2Bf.length%2B'%20conversations%3C%2Fspan%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-btn-sub%22%3E~'%2Bw(f.length)%2B%22%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fbutton%3E%20%20%20%20%20%20%3C%2Fdiv%3E%22%2CF%3Dn.querySelector(%22.g2c-body%22)%3Bif(!F)return%20void%20s(%22Warning%3A%20panel%20body%20not%20found%22%2C%22error%22)%3Bvar%20R%3Ddocument.getElementById(%22g2c-progress%22)%2Cq%3Ddocument.createElement(%22div%22)%3Bq.innerHTML%3DD%3Bvar%20U%3Dq.firstElementChild%7C%7Cq.firstChild%3BR%26%26R.parentNode%3FR.parentNode.insertBefore(U%2CR)%3AF.appendChild(U)%3Bfor(var%20G%3D%5B%22g2c-btn-memory%22%2C%22g2c-btn-convos%22%2C%22g2c-btn-instructions%22%2C%22g2c-btn-all%22%2C%22g2c-camera-divider%22%2C%22g2c-camera-row%22%2C%22g2c-camera-note%22%5D%2CK%3D0%3BK%3CG.length%3BK%2B%2B)%7Bvar%20Y%3Ddocument.getElementById(G%5BK%5D)%3BY%26%26(Y.style.display%3D%22none%22)%7DH%26%26(d(%22g2c-sel-all%22%2C%22click%22%2Cfunction()%7Bfor(var%20e%3Ddocument.querySelectorAll(%22%23g2c-filter-models%20input%22)%2Ct%3D0%3Bt%3Ce.length%3Bt%2B%2B)e%5Bt%5D.checked%3D!0%3Bk()%7D)%2Cd(%22g2c-sel-none%22%2C%22click%22%2Cfunction()%7Bfor(var%20e%3Ddocument.querySelectorAll(%22%23g2c-filter-models%20input%22)%2Ct%3D0%3Bt%3Ce.length%3Bt%2B%2B)e%5Bt%5D.checked%3D!1%3Bk()%7D))%3Bd(%22g2c-prev-drop%22%2C%22click%22%2Cfunction()%7Bvar%20e%3Ddocument.getElementById(%22g2c-prev-file%22)%3Be%26%26e.click()%7D)%3Bfor(var%20X%3Ddocument.querySelectorAll(%22%23g2c-filter-models%20input%2C%20%23g2c-filter-sources%20input%2C%20%23g2c-date-from%2C%20%23g2c-date-to%2C%20%23g2c-limit%22)%2CJ%3D0%3BJ%3CX.length%3BJ%2B%2B)X%5BJ%5D.addEventListener(%22change%22%2Ck)%3Bvar%20W%3Ddocument.getElementById(%22g2c-search%22)%3BW%26%26W.addEventListener(%22input%22%2Ck)%3Bfor(var%20V%3D%7Ball%3A%5Bu(t)%2Cu(a)%5D%2Cgpt35%3A%5B%222022-11-30%22%2C%222023-03-13%22%5D%2Cgpt4%3A%5B%222023-03-14%22%2C%222024-05-12%22%5D%2Cgpt4o%3A%5B%222024-05-13%22%2C%222025-08-06%22%5D%2Cgpt5%3A%5B%222025-08-07%22%2Cu(a)%5D%7D%2CQ%3Ddocument.querySelectorAll(%22%23g2c-era-btns%20button%22)%2CZ%3D0%3BZ%3CQ.length%3BZ%2B%2B)Q%5BZ%5D.addEventListener(%22click%22%2Cfunction()%7Bvar%20e%3Dthis.getAttribute(%22data-era%22)%2Ct%3DV%5Be%5D%3Bif(t)%7Bvar%20n%3Ddocument.getElementById(%22g2c-date-from%22)%2Ca%3Ddocument.getElementById(%22g2c-date-to%22)%3Bn%26%26(n.value%3Dt%5B0%5D)%2Ca%26%26(a.value%3Dt%5B1%5D)%3Bfor(var%20o%3Ddocument.querySelectorAll(%22%23g2c-era-btns%20button%22)%2Cr%3D0%3Br%3Co.length%3Br%2B%2B)o%5Br%5D.style.color%3D%22%22%3Bthis.style.color%3D%22%23d4a574%22%2Ck()%7D%7D)%3Bd(%22g2c-prev-file%22%2C%22change%22%2Cfunction()%7Bthis.files.length%26%26E(this.files%5B0%5D)%7D)%3Bvar%20%24%3Ddocument.getElementById(%22g2c-prev-drop%22)%3B%24%26%26(%24.addEventListener(%22dragover%22%2Cfunction(e)%7Be.preventDefault()%2Cthis.style.borderColor%3D%22%23d4a574%22%7D)%2C%24.addEventListener(%22dragleave%22%2Cfunction()%7Bthis.style.borderColor%3D%22%22%7D)%2C%24.addEventListener(%22drop%22%2Cfunction(e)%7Be.preventDefault()%2Cthis.style.borderColor%3D%22%22%2Ce.dataTransfer.files.length%26%26E(e.dataTransfer.files%5B0%5D)%7D))%3Bd(%22g2c-btn-download%22%2C%22click%22%2CP)%3Bfor(var%20ee%3Ddocument.querySelectorAll(%22%23g2c-filter-models%20input%2C%20%23g2c-filter-sources%20input%22)%2Cte%3D0%3Bte%3Cee.length%3Bte%2B%2B)ee%5Bte%5D.checked%3D!0%3Bk()%7D()%7Dcatch(t)%7Bs(%22Scan%20failed%3A%20%22%2Bt.message%2C%22error%22)%2Cc(e%2C%22error%22%2Ct.message)%7D%7Dfunction%20w(e)%7Bvar%20t%3D5*Math.ceil(e%2Fb)%3Bif(t%3C60)return%22~%22%2BMath.max(Math.round(t)%2C1)%2B%22%20seconds%22%3Bvar%20n%3DMath.round(t%2F60)%3Breturn%20n%3C60%3F%22~%22%2Bn%2B%22%20minutes%22%3A%22~%22%2B(t%2F3600).toFixed(1)%2B%22%20hours%22%7Dfunction%20_()%7Btry%7Bfor(var%20e%3D%7B%7D%2Ct%3Ddocument.querySelectorAll(%22%23g2c-filter-models%20input%22)%2Cn%3D0%3Bn%3Ct.length%3Bn%2B%2B)t%5Bn%5D.checked%26%26(e%5Bt%5Bn%5D.getAttribute(%22data-model%22)%5D%3D!0)%3Bfor(var%20a%3D%7B%7D%2Co%3Ddocument.querySelectorAll(%22%23g2c-filter-sources%20input%22)%2Cr%3D0%3Br%3Co.length%3Br%2B%2B)o%5Br%5D.checked%26%26(a%5Bo%5Br%5D.getAttribute(%22data-source%22)%5D%3D!0)%3Bvar%20i%3Do.length%3E0%26%26Object.keys(a).length%3E0%2Cc%3DObject.keys(e).length%3E0%2Cl%3Ddocument.getElementById(%22g2c-date-from%22)%2Cd%3Ddocument.getElementById(%22g2c-date-to%22)%2Cg%3Ddocument.getElementById(%22g2c-limit%22)%2Cp%3Dl%3Fl.value%3A%22%22%2Cu%3Dd%3Fd.value%3A%22%22%2Cv%3Dp%3Fnew%20Date(p%2B%22T00%3A00%3A00%22).getTime()%2F1e3%3A0%2Cb%3Du%3Fnew%20Date(u%2B%22T23%3A59%3A59%22).getTime()%2F1e3%3A1%2F0%2Cx%3Dg%26%26parseInt(g.value)%7C%7C0%2Cw%3Ddocument.getElementById(%22g2c-search%22)%2C_%3Dw%3Fw.value.trim().toLowerCase()%3A%22%22%2Ck%3D%5B%5D%2CE%3D0%3Bfor(n%3D0%3Bn%3Cf.length%3Bn%2B%2B)%7Bvar%20T%3Df%5Bn%5D%3Bif(_)if(-1%3D%3D%3D(T.title%7C%7C%22%22).toLowerCase().indexOf(_))continue%3Bif(i)if(!a%5BT._archived%3F%22Archived%22%3AT._shared%3F%22Shared%20conversations%22%3AT._project%7C%7C%22Main%20conversations%22%5D)continue%3Bvar%20C%3Dm(T)%3Bif(!c%7C%7Ce%5BC%5D)%7Bvar%20j%3Dh(T)%3Bif(!(j%3E0%26%26(j%3Cv%7C%7Cj%3Eb)%7C%7Cy%5BT.id%5D))%7Bif(!T._project)%7Bif(x%3E0%26%26E%3E%3Dx)continue%3BE%2B%2B%7Dk.push(T)%7D%7D%7Dreturn%20k%7Dcatch(e)%7Breturn%20s(%22Filter%20error%3A%20%22%2Be.message%2C%22error%22)%2Cf%7D%7Dfunction%20k()%7Bvar%20e%3D_()%2Ct%3Ddocument.getElementById(%22g2c-filter-summary%22)%2Cn%3Ddocument.getElementById(%22g2c-btn-download%22)%2Ca%3DObject.keys(y).length%2Co%3De.length%2B%22%20conversations%20selected%22%3Bif(a%3E0%26%26(o%2B%3D%22%20(%22%2Ba%2B%22%20skipped%20from%20previous%20export)%22)%2Ct%26%26(t.textContent%3Do)%2Cn)%7Bvar%20r%3Dn.querySelector(%22.g2c-btn-text%20span%22)%3Br%26%26(r.textContent%3D%22Download%20%22%2Be.length%2B%22%20conversations%22)%3Bvar%20i%3Dn.querySelector(%22.g2c-btn-sub%22)%3Bi%26%26(i.textContent%3Dw(e.length))%7D%7Dfunction%20E(e)%7Bvar%20t%3Ddocument.getElementById(%22g2c-prev-drop%22)%3Bt%26%26(t.textContent%3D%22Loading%20%22%2Be.name%2B%22...%22)%3Bvar%20n%3Dnew%20FileReader%3Bn.onload%3Dfunction(e)%7Btry%7Bvar%20n%3DJSON.parse(e.target.result)%2Ca%3Dn.conversations%7C%7Cn%7C%7C%5B%5D%3Bif(Array.isArray(a))%7By%3D%7B%7D%3Bfor(var%20o%3D0%3Bo%3Ca.length%3Bo%2B%2B)a%5Bo%5D.id%26%26(y%5Ba%5Bo%5D.id%5D%3D!0)%3Bt%26%26(t.textContent%3D%22%E2%9C%85%20%22%2BObject.keys(y).length%2B%22%20conversations%20from%20previous%20export%22%2Ct.className%3D%22g2c-filter-drop%20active%22)%2Cs(%22Loaded%20previous%20export%3A%20%22%2BObject.keys(y).length%2B%22%20conversation%20IDs%22)%2Ck()%7D%7Dcatch(e)%7Bt%26%26(t.textContent%3D%22%E2%9D%8C%20Could%20not%20parse%20file%22)%2Cs(%22Previous%20export%20error%3A%20%22%2Be.message%2C%22error%22)%7D%7D%2Cn.readAsText(e)%7Dfunction%20T(e)%7Bif(!e%7C%7C!e.message%7C%7C!e.message.content)return%22%22%3Bvar%20t%3De.message.content%2Cn%3Dt.content_type%3Bif(%22model_editable_context%22%3D%3D%3Dn)return%22%22%3Bif(%22thoughts%22%3D%3D%3Dn)return%22%5Bthinking%5D%22%3Bif(%22reasoning_recap%22%3D%3D%3Dn)return%22%5B%22%2B(t.content%7C%7C%22Thinking...%22)%2B%22%5D%22%3Bif(%22code%22%3D%3D%3Dn%7C%7C%22execution_output%22%3D%3D%3Dn)%7Bvar%20a%3Dt.language%7C%7C%22%22%2Co%3Dt.text%7C%7C%22%22%3Breturn%22unknown%22%3D%3D%3Da%26%260%3D%3D%3Do.indexOf(%22search(%22)%3F%22%5B%F0%9F%94%8D%20%22%2Bo%2B%22%5D%22%3A%22%60%60%60%22%2Ba%2B%22%5Cn%22%2Bo%2B%22%5Cn%60%60%60%22%7Dvar%20r%3Dt.parts%3Bif(!Array.isArray(r))return%20JSON.stringify(t)%3Bfor(var%20i%3D%5B%5D%2Cs%3D0%3Bs%3Cr.length%3Bs%2B%2B)if(%22string%22%3D%3Dtypeof%20r%5Bs%5D)i.push(r%5Bs%5D)%3Belse%20if(r%5Bs%5D%26%26%22object%22%3D%3Dtypeof%20r%5Bs%5D%26%26(%22image_asset_pointer%22%3D%3D%3Dr%5Bs%5D.content_type%7C%7Cr%5Bs%5D.asset_pointer))%7Bvar%20c%3Dr%5Bs%5D.metadata%26%26r%5Bs%5D.metadata.dalle%26%26r%5Bs%5D.metadata.dalle.prompt%3F%22DALL-E%3A%20%22%2Br%5Bs%5D.metadata.dalle.prompt%3A%22image%22%3Bi.push(%22%5B%F0%9F%96%BC%20%22%2Bc%2B%22%5D%22)%7Dreturn%20i.join(%22%5Cn%22).replace(%2F%5CuE200cite(%5CuE202turn%5Cdsearch%5Cd%2B)%2B%5CuE201%2Fg%2C%22%22).replace(%2F%5CuE200image_group%5CuE202%5C%7B%5B%5E%7D%5D*%5C%7D%5CuE201%2Fg%2C%22%5B%F0%9F%96%BC%20images%5D%22).replace(%2F%5CuE200%5B%5Cs%5CS%5D*%3F%5CuE201%2Fg%2C%22%22)%7Dfunction%20C(e)%7Breturn%20e.message%26%26e.message.author%26%26e.message.author.role%7C%7C%22unknown%22%7Dfunction%20j(e)%7Breturn%20e.message%26%26e.message.metadata%26%26e.message.metadata.model_slug%7C%7Cnull%7Dfunction%20B(e)%7Breturn%20e.message%26%26e.message.create_time%7C%7Cnull%7Dfunction%20I(e%2Ct)%7Bvar%20n%3D%5B%5D%2Ca%3D!1%3Bif(e.mapping)%7Bfor(var%20o%3DObject.keys(e.mapping)%2Cr%3Dnull%2Ci%3D0%3Bi%3Co.length%3Bi%2B%2B)if(!e.mapping%5Bo%5Bi%5D%5D.parent)%7Br%3Do%5Bi%5D%3Bbreak%7Dr%7C%7C(r%3Do%5B0%5D)%3Bfor(var%20s%3Dr%2Cc%3D%7B%7D%2Cl%3D0%3Bs%26%26l%3C5e4%26%26(l%2B%2B%2C!c%5Bs%5D)%3B)%7Bc%5Bs%5D%3D!0%3Bvar%20d%3De.mapping%5Bs%5D%3Bif(!d)break%3Bif(d.message%26%26d.message.content)%7Bvar%20g%3DT(d)%3Bif(%22%22!%3D%3Dg.trim())%7Bvar%20p%3D%7Brole%3AC(d)%2Ccontent%3Ag%2Ctimestamp%3AB(d)%2Cmodel%3Aj(d)%7D%3Bif(d.parent%26%26e.mapping%5Bd.parent%5D)%7Bvar%20u%3De.mapping%5Bd.parent%5D%3Bif(u.children%26%26u.children.length%3E1)%7Bfor(var%20m%3D%5B%5D%2Ch%3D0%3Bh%3Cu.children.length%3Bh%2B%2B)%7Bvar%20v%3Du.children%5Bh%5D%3Bif(v!%3D%3Ds)%7Bvar%20f%3De.mapping%5Bv%5D%3Bif(f%26%26f.message%26%26f.message.content)%7Bvar%20y%3DT(f)%3By.trim()%26%26m.push(%7Bcontent%3Ay%2Crole%3AC(f)%2Ctimestamp%3AB(f)%2Cmodel%3Aj(f)%7D)%7D%7D%7Dm.length%3E0%26%26(p.alternatives%3Dm%2Ca%3D!0)%7D%7Dn.push(p)%7D%7Dif(!(d.children%26%26d.children.length%3E0))break%3Bs%3Dd.children%5Bd.children.length-1%5D%7D%7Dvar%20b%3De.default_model_slug%7C%7Cnull%3Bif(!b%26%26e.mapping)for(var%20x%3DObject.keys(e.mapping)%2Cw%3D0%3Bw%3Cx.length%3Bw%2B%2B)%7Bvar%20_%3De.mapping%5Bx%5Bw%5D%5D%3Bif(_%26%26_.message%26%26_.message.metadata%26%26_.message.metadata.model_slug)%7Bb%3D_.message.metadata.model_slug%3Bbreak%7D%7Dreturn%7Bid%3Ae.conversation_id%7C%7Ct%26%26t.id%7C%7Ce.id%2Ctitle%3Ae.title%7C%7Ct%26%26t.title%7C%7C%22Untitled%22%2Ccreate_time%3Ae.create_time%7C%7Ct%26%26t.create_time%7C%7Cnull%2Cupdate_time%3Ae.update_time%7C%7Ct%26%26t.update_time%7C%7Cnull%2Cmodel%3Ab%2Cproject%3At%26%26t._project%7C%7Cnull%2Cproject_id%3At%26%26t._project_id%7C%7Cnull%2Carchived%3At%26%26t._archived%7C%7C!1%2Cmemory_scope%3At%26%26t.memory_scope%7C%7Cnull%2Cis_do_not_remember%3At%26%26t.is_do_not_remember%7C%7C!1%2Chas_branches%3Aa%2C_mapping_node_count%3Ae.mapping%3FObject.keys(e.mapping).length%3A0%2Cmessage_count%3An.length%2Cmessages%3An%7D%7Dfunction%20S(e%2Ct%2Cn%2Ca)%7Bvar%20o%3DMath.round(e%2Ft*100)%2Cr%3Dt-e%2Ci%3Ddocument.getElementById(%22g2c-dl-count%22)%2Cs%3Ddocument.getElementById(%22g2c-dl-title%22)%2Cc%3Ddocument.getElementById(%22g2c-dl-fill%22)%2Cl%3Ddocument.getElementById(%22g2c-dl-pct%22)%2Cd%3Ddocument.getElementById(%22g2c-dl-remaining%22)%3Bdocument.getElementById(%22g2c-dl-mode%22)%3Bif(i%26%26(i.textContent%3De)%2Cs%26%26(s.textContent%3Dn)%2Cc%26%26(c.style.width%3Do%2B%22%25%22)%2Cl%26%26(l.textContent%3Do%2B%22%25%22)%2Cd%26%26e%3E0)%7Bvar%20g%3D(Date.now()-a)%2F1e3%2Fe%2Cp%3DMath.round(g*r)%3Bd.textContent%3Dp%3C60%3F%22~%22%2Bp%2B%22%20seconds%20remaining%22%3A%22~%22%2BMath.round(p%2F60)%2B%22%20minutes%20remaining%22%7D%7Dasync%20function%20A(e%2Ct)%7Breturn%20await%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fconversation%2F%22%2Be%2C%7Bcredentials%3A%22include%22%2Cheaders%3A%7BAuthorization%3A%22Bearer%20%22%2Bt%7D%7D)%7Dasync%20function%20z(e%2Ct)%7Breturn%20await%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fshare%2F%22%2Be%2C%7Bcredentials%3A%22include%22%2Cheaders%3A%7BAuthorization%3A%22Bearer%20%22%2Bt%7D%7D)%7Dasync%20function%20P()%7Bvar%20e%3D_()%3Bif(0!%3D%3De.length)%7Bfor(var%20t%3D%5B%5D%2Cn%3D%5B%5D%2Ca%3D0%3Ba%3Ce.length%3Ba%2B%2B)e%5Ba%5D._shared%3Fn.push(e%5Ba%5D)%3At.push(e%5Ba%5D)%3B(Re%3Ddocument.getElementById(%22g2c-filter-panel%22))%26%26(Re.innerHTML%3D'%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-dl-hero%22%20id%3D%22g2c-dl-hero%22%3E%20%20%20%20%20%20%20%20%20%20%3Cspan%20class%3D%22g2c-dl-count%22%20id%3D%22g2c-dl-count%22%3E0%3C%2Fspan%3E%20%20%20%20%20%20%20%20%20%20%3Cspan%20class%3D%22g2c-dl-of%22%20id%3D%22g2c-dl-of%22%3E%20%2F%20'%2Be.length%2B'%3C%2Fspan%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-dl-title%22%20id%3D%22g2c-dl-title%22%3EStarting%20download%E2%80%A6%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20style%3D%22margin%3A10px%200%3B%22%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-progress-bar%22%3E%3Cdiv%20class%3D%22g2c-progress-fill%22%20id%3D%22g2c-dl-fill%22%20style%3D%22width%3A0%25%3B%22%3E%3C%2Fdiv%3E%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-dl-pct%22%20id%3D%22g2c-dl-pct%22%3E0%25%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-dl-remaining%22%20id%3D%22g2c-dl-remaining%22%3E%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-dl-mode%22%20id%3D%22g2c-dl-mode%22%20style%3D%22text-align%3Acenter%3Bfont-size%3A10px%3Bcolor%3A%23666%3Bmargin-top%3A4px%3B%22%3E%3C%2Fdiv%3E')%3Bvar%20o%3DDate.now()%3Btry%7Bfor(var%20r%3Dawait%20p()%2Ci%3D%7Bexport_date%3A(new%20Date).toISOString()%2Ctool%3A%22GPT2Claude%20Migration%20Kit%20v2.7%22%2Cformat_version%3A7%2Caccount%3Au%7C%7Cnull%2Ctotal_conversations%3Ae.length%2Cconversations%3A%5B%5D%7D%2Cc%3D0%2Cd%3D0%2Cg%3D!0%2Cm%3D%7B%7D%2Ch%3D0%3Bh%3Ce.length%3Bh%2B%2B)m%5Be%5Bh%5D.id%5D%3De%5Bh%5D%3Bif(t.length%3E0)%7Bs(%22Using%20batch%20download%20(10%20at%20a%20time)%E2%80%A6%22)%2C(Ee%3Ddocument.getElementById(%22g2c-dl-mode%22))%26%26(Ee.textContent%3D%22%E2%9A%A1%20Batch%20mode%20%E2%80%94%2010x%20faster%22)%3Bvar%20v%3D0%2Cf%3D0%3Basync%20function%20y(e%2Ct)%7Bfor(var%20n%3D%5B%5D%2Ca%3D0%3Ba%3Ce.length%3Ba%2B%2B)%7Btry%7Bvar%20o%3Dawait%20A(e%5Ba%5D.id%2Ct)%3Bif(429%3D%3D%3Do.status)%7Bs(%22Rate%20limited%2C%20waiting%2030s%E2%80%A6%22%2C%22error%22)%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C3e4)%7D)%2Ca--%3Bcontinue%7Dif(200!%3D%3Do.status)%7Bn.push(%7Berror%3A%22HTTP%20%22%2Bo.status%2Citem%3Ae%5Ba%5D%7D)%3Bcontinue%7Dvar%20r%3Dawait%20o.json()%3Bn.push(%7Bdetail%3Ar%2Citem%3Ae%5Ba%5D%7D)%7Dcatch(t)%7Bn.push(%7Berror%3At.message%2Citem%3Ae%5Ba%5D%7D)%7Dawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7Dreturn%20n%7Dasync%20function%20x(e%2Ct)%7Btry%7Bvar%20n%3Dawait%20async%20function(e%2Ct)%7Breturn%20await%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fconversations%2Fbatch%22%2C%7Bmethod%3A%22POST%22%2Ccredentials%3A%22include%22%2Cheaders%3A%7BAuthorization%3A%22Bearer%20%22%2Bt%2C%22Content-Type%22%3A%22application%2Fjson%22%7D%2Cbody%3AJSON.stringify(%7Bconversation_ids%3Ae%7D)%7D)%7D(e%2Ct)%3Breturn%20200%3D%3D%3Dn.status%3F%7Bok%3A!0%2Cdata%3Aawait%20n.json()%2Cstatus%3A200%7D%3A%7Bok%3A!1%2Cdata%3Anull%2Cstatus%3An.status%7D%7Dcatch(e)%7Breturn%7Bok%3A!1%2Cdata%3Anull%2Cstatus%3A0%2Cerror%3Ae.message%7D%7D%7Dfor(%3Bv%3Ct.length%26%26g%3B)%7Bfor(var%20w%3Dt.slice(v%2Cv%2Bb)%2Ck%3D%5B%5D%2CE%3D0%3BE%3Cw.length%3BE%2B%2B)k.push(w%5BE%5D.id)%3Bvar%20T%3Dawait%20x(k%2Cr)%3Bif(429!%3D%3DT.status)%7Bif(422%3D%3D%3DT.status%7C%7C405%3D%3D%3DT.status%7C%7C404%3D%3D%3DT.status)%7Bs(%22Batch%20endpoint%20unavailable%20(HTTP%20%22%2BT.status%2B%22)%2C%20falling%20back%20to%20individual%20downloads%E2%80%A6%22%2C%22error%22)%2Cg%3D!1%3Bbreak%7Dif(T.ok)%7Bf%3D0%3Bfor(var%20C%3DT.data%2Cj%3DArray.isArray(C)%3FC%3AObject.values(C)%2CB%3D0%3BB%3Cj.length%3BB%2B%2B)try%7Bvar%20P%3DI(de%3Dj%5BB%5D%2Cm%5Bde.conversation_id%7C%7Cde.id%5D%7C%7Cw%5BB%5D)%3Bi.conversations.push(P)%2Cc%2B%2B%7Dcatch(Ze)%7Bvar%20O%3Dw%5BB%5D%26%26w%5BB%5D.title%7C%7C%22Unknown%22%3Bs(%22Error%20processing%3A%20%22%2BO%2B%22%20%E2%80%94%20%22%2BZe.message%2C%22error%22)%2Cd%2B%2B%2Ci.conversations.push(%7Bid%3Ak%5BB%5D%2Ctitle%3AO%2Cerror%3AZe.message%7D)%7Dv%2B%3Db%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7Delse%7Bs(%22Batch%20error%20(HTTP%20%22%2B(T.status%7C%7CT.error)%2B%22)%2C%20retrying%20in%203s%E2%80%A6%22%2C%22error%22)%2CEe%26%26(Ee.textContent%3D%22%E2%9A%A1%20Retrying%20batch%E2%80%A6%22)%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C3e3)%7D)%3Bvar%20L%3Dawait%20x(k%2Cr)%3Bif(L.ok)%7Bf%3D0%3Bfor(var%20M%3DArray.isArray(L.data)%3FL.data%3AObject.values(L.data)%2CH%3D0%3BH%3CM.length%3BH%2B%2B)try%7Bvar%20N%3DM%5BH%5D%3Bh%3Dm%5BN.conversation_id%7C%7CN.id%5D%7C%7Cw%5BH%5D%3Bi.conversations.push(I(N%2Ch))%2Cc%2B%2B%7Dcatch(%24e)%7Bd%2B%2B%2Ci.conversations.push(%7Bid%3Ak%5BH%5D%2Ctitle%3Aw%5BH%5D%26%26w%5BH%5D.title%7C%7C%22Unknown%22%2Cerror%3A%24e.message%7D)%7Dv%2B%3Db%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7Delse%20if(k.length%3E1)%7Bs(%22Retry%20failed%2C%20splitting%20batch%E2%80%A6%22%2C%22error%22)%2CEe%26%26(Ee.textContent%3D%22%E2%9A%A1%20Splitting%20batch%E2%80%A6%22)%3Bfor(var%20D%3DMath.ceil(k.length%2F2)%2CF%3Dk.slice(0%2CD)%2CR%3Dk.slice(D)%2Cq%3Dw.slice(0%2CD)%2CU%3Dw.slice(D)%2CG%3D!1%2CK%3D%5B%7Bids%3AF%2Citems%3Aq%7D%2C%7Bids%3AR%2Citems%3AU%7D%5D%2CY%3D0%3BY%3CK.length%3BY%2B%2B)%7Bvar%20X%3Dawait%20x(K%5BY%5D.ids%2Cr)%3Bif(X.ok)for(var%20J%3DArray.isArray(X.data)%3FX.data%3AObject.values(X.data)%2CW%3D0%3BW%3CJ.length%3BW%2B%2B)try%7Bvar%20V%3DJ%5BW%5D%2CQ%3Dm%5BV.conversation_id%7C%7CV.id%5D%7C%7CK%5BY%5D.items%5BW%5D%3Bi.conversations.push(I(V%2CQ))%2Cc%2B%2B%7Dcatch(et)%7Bd%2B%2B%2Ci.conversations.push(%7Bid%3AK%5BY%5D.ids%5BW%5D%2Ctitle%3AK%5BY%5D.items%5BW%5D%26%26K%5BY%5D.items%5BW%5D.title%7C%7C%22Unknown%22%2Cerror%3Aet.message%7D)%7Delse%7BG%3D!0%2Cs(%22Half-batch%20failed%2C%20downloading%20%22%2BK%5BY%5D.ids.length%2B%22%20individually%E2%80%A6%22%2C%22error%22)%3Bfor(var%20Z%3Dawait%20y(K%5BY%5D.items%2Cr)%2C%24%3D0%3B%24%3CZ.length%3B%24%2B%2B)if(Z%5B%24%5D.detail)try%7Bi.conversations.push(I(Z%5B%24%5D.detail%2CZ%5B%24%5D.item))%2Cc%2B%2B%7Dcatch(tt)%7Bd%2B%2B%2Ci.conversations.push(%7Bid%3AZ%5B%24%5D.item.id%2Ctitle%3AZ%5B%24%5D.item.title%7C%7C%22Unknown%22%2Cerror%3Att.message%7D)%7Delse%20d%2B%2B%2Ci.conversations.push(%7Bid%3AZ%5B%24%5D.item.id%2Ctitle%3AZ%5B%24%5D.item.title%7C%7C%22Unknown%22%2Cerror%3AZ%5B%24%5D.error%7D)%7Dawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7DG%3Fs(%22Batch%20group%20recovered%20individually%2C%20resuming%20batch%20mode%20(%22%2B%20%2B%2Bf%2B%22%2F3%20fails)%22%2C%22error%22)%3Af%3D0%2Cv%2B%3Db%7Delse%7Bfor(var%20ee%3Dawait%20y(w%2Cr)%2Cte%3D0%3Bte%3Cee.length%3Bte%2B%2B)if(ee%5Bte%5D.detail)try%7Bi.conversations.push(I(ee%5Bte%5D.detail%2Cee%5Bte%5D.item))%2Cc%2B%2B%7Dcatch(nt)%7Bd%2B%2B%2Ci.conversations.push(%7Bid%3Aee%5Bte%5D.item.id%2Ctitle%3Aee%5Bte%5D.item.title%7C%7C%22Unknown%22%2Cerror%3Ant.message%7D)%7Delse%20d%2B%2B%2Ci.conversations.push(%7Bid%3Aee%5Bte%5D.item.id%2Ctitle%3Aee%5Bte%5D.item.title%7C%7C%22Unknown%22%2Cerror%3Aee%5Bte%5D.error%7D)%3Bf%2B%2B%2Cv%2B%3Db%7Df%3E%3D3%3F(s(%22Too%20many%20consecutive%20batch%20failures%20(3)%2C%20switching%20to%20individual%20mode%22%2C%22error%22)%2Cg%3D!1)%3Af%3E0%26%26Ee%26%26(Ee.textContent%3D%22%E2%9A%A1%20Batch%20mode%20%E2%80%94%20resumed%22)%7Dvar%20ne%3Dc%2Bd%2Cae%3Dw%5Bw.length-1%5D.title%7C%7C%22Untitled%22%3BS(ne%2Ce.length%2Cae%2Co)%2Cne%25100!%3D0%26%26ne!%3D%3De.length%7C%7Cs(%22Progress%3A%20%22%2Bne%2B%22%2F%22%2Be.length)%7Delse%7Bs(%22Rate%20limited%2C%20waiting%2030s%E2%80%A6%22%2C%22error%22)%3Bvar%20oe%3Ddocument.getElementById(%22g2c-dl-title%22)%2Cre%3Ddocument.getElementById(%22g2c-dl-remaining%22)%3Boe%26%26(oe.textContent%3D%22Rate%20limited%20%E2%80%94%20waiting%2030s%E2%80%A6%22)%2Cre%26%26(re.textContent%3D%22Will%20resume%20automatically%22)%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C3e4)%7D)%7D%7Dif(!g)%7BEe%26%26(Ee.textContent%3D%22%F0%9F%90%A2%20Individual%20mode%22)%2Cs(%22Switching%20to%20individual%20downloads%E2%80%A6%22)%3Bfor(var%20ie%3Dc%2Bd%3Bie%3Ct.length%3Bie%2B%2B)%7Bvar%20se%3Dt%5Bie%5D%2Cce%3Dse.title%7C%7C%22Untitled%22%3BS(ie%2B1%2Ce.length%2Cce%2Co)%3Btry%7Bvar%20le%3Dawait%20A(se.id%2Cr)%3Bif(429%3D%3D%3Dle.status)%7Bs(%22Rate%20limited%2C%20waiting%2030s%E2%80%A6%22%2C%22error%22)%3Boe%3Ddocument.getElementById(%22g2c-dl-title%22)%2Cre%3Ddocument.getElementById(%22g2c-dl-remaining%22)%3Boe%26%26(oe.textContent%3D%22Rate%20limited%20%E2%80%94%20waiting%2030s%E2%80%A6%22)%2Cre%26%26(re.textContent%3D%22Will%20resume%20automatically%22)%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C3e4)%7D)%2Cie--%3Bcontinue%7Dif(200!%3D%3Dle.status)%7Bs(%22Skipped%3A%20%22%2Bce%2B%22%20(HTTP%20%22%2Ble.status%2B%22)%22%2C%22error%22)%2Cd%2B%2B%2Ci.conversations.push(%7Bid%3Ase.id%2Ctitle%3Ace%2Cerror%3A%22HTTP%20%22%2Ble.status%7D)%3Bcontinue%7Dvar%20de%3BP%3DI(de%3Dawait%20le.json()%2Cse)%3Bi.conversations.push(P)%2Cc%2B%2B%2Cie%2525%3D%3D0%26%26ie%3E0%26%26s(%22Progress%3A%20%22%2B(ie%2B1)%2B%22%2F%22%2Be.length)%7Dcatch(at)%7Bs(%22Error%3A%20%22%2Bce%2B%22%20%E2%80%94%20%22%2Bat.message%2C%22error%22)%2Cd%2B%2B%2Ci.conversations.push(%7Bid%3Ase.id%2Ctitle%3Ace%2Cerror%3Aat.message%7D)%7Dawait%20new%20Promise(function(e)%7BsetTimeout(e%2C1e3)%7D)%7D%7D%7Dfor(var%20ge%3D%5B%5D%2Cpe%3D0%3Bpe%3Ci.conversations.length%3Bpe%2B%2B)%7Bvar%20ue%3Di.conversations%5Bpe%5D%3Bif(!ue.error%26%26ue._mapping_node_count)%7Bvar%20me%3D0%3Bue.create_time%26%26ue.update_time%26%26(me%3Due.update_time-ue.create_time)%3Bvar%20he%3Dme%2F86400%2Cve%3D!1%3B(0%3D%3D%3Due.message_count%26%26ue._mapping_node_count%3E0%7C%7Che%3E30%26%26ue._mapping_node_count%3C40%7C%7Che%3E7%26%26ue._mapping_node_count%3C20%7C%7Che%3E1%26%26ue.message_count%3C4)%26%26(ve%3D!0)%2Cve%26%26ge.push(%7Bindex%3Ape%2Cconv%3Aue%7D)%7D%7Dif(ge.length%3E0)%7Bs(%22Truncation%20check%3A%20%22%2Bge.length%2B%22%20conversation(s)%20flagged%2C%20re-fetching%E2%80%A6%22)%2C(Ee%3Ddocument.getElementById(%22g2c-dl-mode%22))%26%26(Ee.textContent%3D%22%F0%9F%94%8D%20Verifying%20truncated%20conversations%E2%80%A6%22)%3Bfor(var%20fe%3D0%2Cye%3D0%2Cbe%3D0%3Bbe%3Cge.length%3Bbe%2B%2B)%7Bvar%20xe%3Dge%5Bbe%5D%3Btry%7Bvar%20we%3Dawait%20A(xe.conv.id%2Cr)%3Bif(429%3D%3D%3Dwe.status)%7Bs(%22Rate%20limited%20during%20truncation%20check%2C%20waiting%2030s%E2%80%A6%22%2C%22error%22)%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C3e4)%7D)%2Cbe--%3Bcontinue%7Dif(200!%3D%3Dwe.status)continue%3Bvar%20_e%3Dawait%20we.json()%3Bif((_e.mapping%3FObject.keys(_e.mapping).length%3A0)%3Exe.conv._mapping_node_count)%7Bvar%20ke%3DI(_e%2Cm%5Bxe.conv.id%5D%7C%7Cnull)%3Bke.project%3Dxe.conv.project%2Cke.project_id%3Dxe.conv.project_id%2Cke.archived%3Dxe.conv.archived%2Cke._truncation_recovered%3D!0%2Cke._batch_node_count%3Dxe.conv._mapping_node_count%2Cke._batch_message_count%3Dxe.conv.message_count%2Ci.conversations%5Bxe.index%5D%3Dke%2Cfe%2B%2B%2Cs(%22Recovered%3A%20%22%2Bxe.conv.title%2B%22%20(%22%2Bxe.conv.message_count%2B%22%20%E2%86%92%20%22%2Bke.message_count%2B%22%20messages)%22)%7Delse%20ye%2B%2B%7Dcatch(ot)%7Bs(%22Re-fetch%20failed%3A%20%22%2Bxe.conv.title%2B%22%20%E2%80%94%20%22%2Bot.message%2C%22error%22)%7Dawait%20new%20Promise(function(e)%7BsetTimeout(e%2C500)%7D)%7Ds(fe%3E0%3F%22Truncation%20recovery%3A%20%22%2Bfe%2B%22%20conversation(s)%20recovered%2C%20%22%2Bye%2B%22%20verified%20OK%22%3A%22Truncation%20check%3A%20all%20%22%2Bge.length%2B%22%20verified%20OK%22)%2CEe%26%26(Ee.textContent%3D%22%22)%7Dif(n.length%3E0)%7Bvar%20Ee%3Bs(%22Downloading%20%22%2Bn.length%2B%22%20shared%20conversation(s)%E2%80%A6%22)%2C(Ee%3Ddocument.getElementById(%22g2c-dl-mode%22))%26%26(Ee.textContent%3D%22%F0%9F%94%97%20Shared%20conversations%22)%3Bfor(var%20Te%3D0%3BTe%3Cn.length%3BTe%2B%2B)%7Bvar%20Ce%3Dn%5BTe%5D%2Cje%3DCe._share_id%2CBe%3DCe.title%7C%7C%22Shared%20conversation%22%3BS((ne%3Dc%2Bd)%2B1%2Ce.length%2CBe%2Co)%3Btry%7Bvar%20Ie%3Dawait%20z(je%2Cr)%3Bif(429%3D%3D%3DIe.status)%7Bs(%22Rate%20limited%2C%20waiting%2030s%E2%80%A6%22%2C%22error%22)%2Cawait%20new%20Promise(function(e)%7BsetTimeout(e%2C3e4)%7D)%2CTe--%3Bcontinue%7Dif(200!%3D%3DIe.status)%7Bs(%22Skipped%20shared%3A%20%22%2BBe%2B%22%20(HTTP%20%22%2BIe.status%2B%22)%22%2C%22error%22)%2Cd%2B%2B%2Ci.conversations.push(%7Bid%3ACe.id%2Ctitle%3ABe%2Cshared%3A!0%2Cerror%3A%22HTTP%20%22%2BIe.status%7D)%3Bcontinue%7D(P%3DI(await%20Ie.json()%2CCe)).shared%3D!0%2CP.share_id%3Dje%2Ci.conversations.push(P)%2Cc%2B%2B%7Dcatch(rt)%7Bs(%22Error%20shared%3A%20%22%2BBe%2B%22%20%E2%80%94%20%22%2Brt.message%2C%22error%22)%2Cd%2B%2B%2Ci.conversations.push(%7Bid%3ACe.id%2Ctitle%3ABe%2Cshared%3A!0%2Cerror%3Art.message%7D)%7Dawait%20new%20Promise(function(e)%7BsetTimeout(e%2C1e3)%7D)%7D%7Dvar%20Se%3DJSON.stringify(i%2Cnull%2C2)%2CAe%3DSe.length%2Cze%3DAe%3C1048576%3F(Ae%2F1024).toFixed(0)%2B%22%20KB%22%3A(Ae%2F1024%2F1024).toFixed(1)%2B%22%20MB%22%2CPe%3D%22chatgpt_all_conversations.json%22%2COe%3D%7B%7D%2CLe%3D!1%2CMe%3D!1%2CHe%3D!1%3Bfor(a%3D0%3Ba%3Ci.conversations.length%3Ba%2B%2B)i.conversations%5Ba%5D.shared%3FMe%3D!0%3Ai.conversations%5Ba%5D.archived%3FHe%3D!0%3Ai.conversations%5Ba%5D.project%3FOe%5Bi.conversations%5Ba%5D.project%5D%3D!0%3ALe%3D!0%3Bvar%20Ne%3DObject.keys(Oe)%3BLe%7C%7CMe%7C%7CHe%7C%7C1!%3D%3DNe.length%3F!Le%26%26!Me%26%26!He%26%26Ne.length%3E1%3FPe%3D%22chatgpt_projects.json%22%3ALe%7C%7C!Me%7C%7CHe%7C%7C0!%3D%3DNe.length%3FLe%7C%7CMe%7C%7C!He%7C%7C0!%3D%3DNe.length%7C%7C(Pe%3D%22chatgpt_archived_conversations.json%22)%3APe%3D%22chatgpt_shared_conversations.json%22%3APe%3D%22chatgpt_project_%22%2BNe%5B0%5D.toLowerCase().replace(%2F%5B%5Ea-z0-9%5D%2B%2Fg%2C%22_%22)%2B%22.json%22%2Cl(Se%2CPe%2C%22application%2Fjson%22)%3Bfor(var%20De%3D0%2CFe%3D0%3BFe%3Ci.conversations.length%3BFe%2B%2B)i.conversations%5BFe%5D._truncation_recovered%26%26De%2B%2B%3Bvar%20Re%2Cqe%3D%22DONE!%20%22%2Bc%2B%22%20conversations%2C%20%22%2Bd%2B%22%20errors%2C%20~%22%2Bze%3BDe%3E0%26%26(qe%2B%3D%22%20(%22%2BDe%2B%22%20recovered%20from%20truncation)%22)%2Cs(qe%2C%22success%22)%3Bfor(var%20Ue%3D%7B%7D%2CGe%3D0%3BGe%3Ci.conversations.length%3BGe%2B%2B)%7Bvar%20Ke%3Di.conversations%5BGe%5D.model%7C%7C%22unknown%22%3BUe%5BKe%5D%3D(Ue%5BKe%5D%7C%7C0)%2B1%7Dvar%20Ye%3DObject.keys(Ue).sort(function(e%2Ct)%7Breturn%20Ue%5Bt%5D-Ue%5Be%5D%7D)%2CXe%3D'%3Cdiv%20class%3D%22g2c-complete-models-wrap%22%3E'%3Bfor(pe%3D0%3Bpe%3CMath.min(5%2CYe.length)%3Bpe%2B%2B)%7BXe%2B%3D'%3Cspan%20class%3D%22g2c-scan-tag%22%3E'%2B(Je%3DYe%5Bpe%5D)%2B'%20%3Cspan%20style%3D%22opacity%3A0.6%3B%22%3E'%2BUe%5BJe%5D%2B%22%3C%2Fspan%3E%3C%2Fspan%3E%22%7Dif(Ye.length%3E5)%7BXe%2B%3D'%3Cbutton%20class%3D%22g2c-models-toggle%22%20id%3D%22g2c-models-toggle%22%3E%2B'%2B(Ye.length-5)%2B%22%20more%3C%2Fbutton%3E%22%2CXe%2B%3D'%3Cdiv%20class%3D%22g2c-models-extra%22%20id%3D%22g2c-models-extra%22%20style%3D%22display%3Anone%3B%22%3E'%3Bfor(pe%3D5%3Bpe%3CYe.length%3Bpe%2B%2B)%7Bvar%20Je%3BXe%2B%3D'%3Cspan%20class%3D%22g2c-scan-tag%22%3E'%2B(Je%3DYe%5Bpe%5D)%2B'%20%3Cspan%20style%3D%22opacity%3A0.6%3B%22%3E'%2BUe%5BJe%5D%2B%22%3C%2Fspan%3E%3C%2Fspan%3E%22%7DXe%2B%3D%22%3C%2Fdiv%3E%22%7Dif(Xe%2B%3D%22%3C%2Fdiv%3E%22%2CRe%3Ddocument.getElementById(%22g2c-filter-panel%22))%7Bvar%20We%3DMath.round((Date.now()-o)%2F1e3)%2CVe%3DWe%3C60%3FWe%2B%22s%22%3AMath.round(We%2F60)%2B%22m%20%22%2BWe%2560%2B%22s%22%3BRe.innerHTML%3D'%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-complete%22%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-complete-icon%22%3E%E2%9C%85%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-complete-title%22%3EExport%20Complete!%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-complete-sub%22%3E'%2Bc%2B%22%20conversations%20%C2%B7%20%22%2Bze%2B%22%20%C2%B7%20%22%2BVe%2B%22%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%20%20%22%2B(De%3E0%3F'%3Cdiv%20class%3D%22g2c-complete-sub%22%20style%3D%22color%3A%23a0e0a0%3B%22%3E%F0%9F%94%8D%20'%2BDe%2B%22%20conversation(s)%20recovered%20from%20batch%20truncation%3C%2Fdiv%3E%22%3A%22%22)%2B%22%20%20%20%20%20%20%20%20%20%20%20%20%22%2BXe%2B'%20%20%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-whatsnext%22%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-whatsnext-title%22%3EWhat%E2%80%99s%20next%3F%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-whatsnext-item%22%3E%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20style%3D%22color%3A%23a0a0e0%3B%22%3E%F0%9F%91%80%20Browse%20your%20data%3C%2Fspan%3E%3Cbr%3E%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20style%3D%22color%3A%23999%3B%22%3EOpen%20the%20%3Ca%20href%3D%22https%3A%2F%2Fsiamsnus.github.io%2FGPT2Claude-Migration-Kit%2Fviewer.html%22%20target%3D%22_blank%22%3EConversation%20Viewer%3C%2Fa%3E%20to%20explore%20your%20chats.%20You%20can%20%3Ca%20href%3D%22https%3A%2F%2Fsiamsnus.github.io%2FGPT2Claude-Migration-Kit%2Fviewer.html%22%20download%20target%3D%22_blank%22%3Edownload%20it%3C%2Fa%3E%20for%20fully%20offline%20use.%3C%2Fspan%3E%20%20%20%20%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22g2c-whatsnext-item%22%3E%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20style%3D%22color%3A%237eb8a0%3B%22%3E%F0%9F%9A%80%20Import%20to%20Claude%3C%2Fspan%3E%20%3Cspan%20class%3D%22g2c-whatsnext-badge%22%3Erecommended%3C%2Fspan%3E%3Cbr%3E%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20style%3D%22color%3A%23999%3B%22%3EFollow%20the%20%3Ca%20href%3D%22https%3A%2F%2Fsiamsnus.github.io%2FGPT2Claude-Migration-Kit%2F%23importing%22%20target%3D%22_blank%22%3Eimport%20guide%3C%2Fa%3E%20to%20bring%20your%20history%20into%20Claude.%3C%2Fspan%3E%20%20%20%20%20%20%20%20%20%20%20%20%3C%2Fdiv%3E%20%20%20%20%20%20%20%20%20%20%3C%2Fdiv%3E'%3Bvar%20Qe%3Ddocument.getElementById(%22g2c-models-toggle%22)%3BQe%26%26Qe.addEventListener(%22click%22%2Cfunction()%7Bvar%20e%3Ddocument.getElementById(%22g2c-models-extra%22)%3Bif(e)%7Bvar%20t%3D%22none%22!%3D%3De.style.display%3Be.style.display%3Dt%3F%22none%22%3A%22flex%22%2Cthis.textContent%3Dt%3F%22%2B%22%2B(Ye.length-5)%2B%22%20more%22%3A%22show%20less%22%7D%7D)%7D%7Dcatch(it)%7Bs(%22Download%20failed%3A%20%22%2Bit.message%2C%22error%22)%2C(oe%3Ddocument.getElementById(%22g2c-dl-title%22))%26%26(oe.textContent%3D%22Error%3A%20%22%2Bit.message)%7D%7Delse%20alert(%22No%20conversations%20selected.%20Adjust%20your%20filters.%22)%7Dasync%20function%20O()%7Bvar%20e%3Ddocument.getElementById(%22g2c-btn-instructions%22)%3Bc(e%2C%22running%22%2C%22Exporting...%22)%3Btry%7Bfor(var%20t%3D%7BAuthorization%3A%22Bearer%20%22%2Bawait%20p()%7D%2Cn%3D%5B%7Bname%3A%22custom_instructions%22%2Curl%3A%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fuser_system_messages%22%7D%2C%7Bname%3A%22settings%22%2Curl%3A%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fsettings%22%7D%2C%7Bname%3A%22beta_features%22%2Curl%3A%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fsettings%2Fbeta_features%22%7D%2C%7Bname%3A%22models%22%2Curl%3A%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fmodels%22%7D%2C%7Bname%3A%22account%22%2Curl%3A%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Faccounts%2Fcheck%2Fv4-2023-04-27%22%7D%2C%7Bname%3A%22codex_usage%22%2Curl%3A%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fcodex%2Fusage%22%7D%2C%7Bname%3A%22compliance%22%2Curl%3A%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fcompliance%22%7D%5D%2Ca%3D%7Bexport_date%3A(new%20Date).toISOString()%2Ctool%3A%22GPT2Claude%20Migration%20Kit%20v2.7%22%2Cdata%3A%7B%7D%7D%2Co%3D0%3Bo%3Cn.length%3Bo%2B%2B)%7Bvar%20r%3Dn%5Bo%5D%3Bs(%22Fetching%20%22%2Br.name%2B%22...%22)%3Btry%7Bvar%20i%3Dawait%20fetch(r.url%2C%7Bcredentials%3A%22include%22%2Cheaders%3At%7D)%3B200%3D%3D%3Di.status%3F(a.data%5Br.name%5D%3Dawait%20i.json()%2Cs(%22Got%3A%20%22%2Br.name))%3A404%3D%3D%3Di.status%3F(a.data%5Br.name%5D%3D%7Bnote%3A%22Not%20available%20on%20this%20account%22%7D%2Cs(r.name%2B%22%3A%20not%20available%20(skipped)%22))%3A(a.data%5Br.name%5D%3D%7Berror%3A%22HTTP%20%22%2Bi.status%7D%2Cs(r.name%2B%22%3A%20HTTP%20%22%2Bi.status%2C%22error%22))%7Dcatch(e)%7Ba.data%5Br.name%5D%3D%7Berror%3Ae.message%7D%2Cs(r.name%2B%22%20error%3A%20%22%2Be.message%2C%22error%22)%7D%7Dl(JSON.stringify(a%2Cnull%2C2)%2C%22chatgpt_instructions.json%22%2C%22application%2Fjson%22)%2Cc(e%2C%22done%22%2C%22Instructions%20exported%22)%7Dcatch(t)%7Bs(%22Instructions%20export%20failed%3A%20%22%2Bt.message%2C%22error%22)%2Cc(e%2C%22error%22%2Ct.message)%7D%7Dfunction%20L(e%2Ct)%7Bvar%20n%3Ddocument.createElement(%22textarea%22)%3Bn.value%3De%2Cn.style.position%3D%22fixed%22%2Cn.style.left%3D%22-9999px%22%2Cdocument.body.appendChild(n)%2Cn.select()%3Btry%7Bdocument.execCommand(%22copy%22)%2Ct.textContent%3D%22%E2%9C%85%20Copied!%22%2CsetTimeout(function()%7Bt.textContent%3D%22Copy%20log%22%7D%2C2e3)%7Dcatch(e)%7Bt.textContent%3D%22Copy%20failed%22%2CsetTimeout(function()%7Bt.textContent%3D%22Copy%20log%22%7D%2C2e3)%7Ddocument.body.removeChild(n)%7Ddocument.getElementById(%22g2c-close%22).addEventListener(%22click%22%2Cfunction()%7Bn.style.animation%3D%22g2c-fadein%200.2s%20ease-out%20reverse%22%2CsetTimeout(function()%7Bn.remove()%2Ct.remove()%7D%2C200)%7D)%2Cdocument.getElementById(%22g2c-btn-memory%22).addEventListener(%22click%22%2Cv)%2Cdocument.getElementById(%22g2c-btn-convos%22).addEventListener(%22click%22%2Cx)%2Cdocument.getElementById(%22g2c-btn-instructions%22).addEventListener(%22click%22%2CO)%2Cdocument.getElementById(%22g2c-btn-all%22).addEventListener(%22click%22%2Casync%20function()%7Bc(document.getElementById(%22g2c-btn-all%22)%2C%22running%22%2C%22Exporting%20everything...%22)%2Cs(%22---%20EXPORT%20ALL%20started%20---%22)%2Cawait%20v()%2Cawait%20O()%2Cs(%22Memories%20%26%20instructions%20done.%20Scanning%20conversations...%22)%2Cawait%20x()%2Cs(%22Memories%20%26%20instructions%20exported.%20Configure%20conversation%20filters%20and%20click%20Download.%22%2C%22success%22)%7D)%2Cdocument.getElementById(%22g2c-toggle-log%22).addEventListener(%22click%22%2Cfunction()%7Bvar%20e%3Di.classList.contains(%22visible%22)%3Bi.classList.toggle(%22visible%22)%2Cthis.textContent%3De%3F%22Show%20log%20%E2%96%BC%22%3A%22Hide%20log%20%E2%96%B2%22%7D)%2Cdocument.getElementById(%22g2c-copy-log%22).addEventListener(%22click%22%2Cfunction()%7Bfor(var%20e%3Dthis%2Ct%3Ddocument.querySelectorAll(%22.g2c-log-entry%22)%2Cn%3D%22%22%2Ca%3D0%3Ba%3Ct.length%3Ba%2B%2B)n%2B%3Dt%5Ba%5D.textContent%2B%22%5Cn%22%3Bnavigator.clipboard%26%26navigator.clipboard.writeText%3Fnavigator.clipboard.writeText(n).then(function()%7Be.textContent%3D%22%E2%9C%85%20Copied!%22%2CsetTimeout(function()%7Be.textContent%3D%22Copy%20log%22%7D%2C2e3)%7D).catch(function()%7BL(n%2Ce)%7D)%3AL(n%2Ce)%7D)%2Cs(%22Ready.%20Click%20a%20button%20to%20start%20exporting.%22)%3Bvar%20M%3Dnull%3B!async%20function()%7Btry%7Bvar%20e%3Ddocument.getElementById(%22g2c-camera-btn%22)%3Bif(!e)return%3Bvar%20t%3D%7BAuthorization%3A%22Bearer%20%22%2Bawait%20p()%7D%2Cn%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fsettings%2Fbeta_features%22%2C%7Bcredentials%3A%22include%22%2Cheaders%3At%7D)%3Bif(200%3D%3D%3Dn.status)%7Bvar%20a%3Dawait%20n.json()%3BM%3D!!a.video_screen_sharing%2Ce.className%3D%22g2c-tool-toggle%22%2B(M%3F%22%20on%22%3A%22%22)%2Ce.textContent%3DM%3F%22ON%22%3A%22OFF%22%7D%7Dcatch(e)%7B%7D%7D()%2Cd(%22g2c-camera-btn%22%2C%22click%22%2Casync%20function()%7Bvar%20e%3Ddocument.getElementById(%22g2c-camera-btn%22)%2Ct%3Ddocument.getElementById(%22g2c-camera-note%22)%3Bif(e)%7Be.className%3D%22g2c-tool-toggle%20checking%22%2Ce.textContent%3D%22%E2%80%A6%22%3Btry%7Bvar%20n%3D%7BAuthorization%3A%22Bearer%20%22%2Bawait%20p()%2C%22Content-Type%22%3A%22application%2Fjson%22%7D%3Bif(null%3D%3D%3DM)%7Bvar%20a%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fsettings%2Fbeta_features%22%2C%7Bcredentials%3A%22include%22%2Cheaders%3An%7D)%3Bif(200%3D%3D%3Da.status)%7Bvar%20o%3Dawait%20a.json()%3Bs(%22Camera%20currently%3A%20%22%2B((M%3D!!o.video_screen_sharing)%3F%22ON%22%3A%22OFF%22))%7Delse%20M%3D!1%2Cs(%22Beta%20features%3A%20HTTP%20%22%2Ba.status%2B%22%20(assuming%20off)%22)%7Dvar%20r%3D!M%2Ci%3Dawait%20fetch(%22https%3A%2F%2Fchatgpt.com%2Fbackend-api%2Fsettings%2Fbeta_features%3Ffeature%3Dvideo_screen_sharing%26value%3D%22%2Br%2C%7Bmethod%3A%22POST%22%2Ccredentials%3A%22include%22%2Cheaders%3An%7D)%3Bif(200!%3D%3Di.status)throw%20new%20Error(%22HTTP%20%22%2Bi.status)%3BM%3Dr%2Ce.className%3D%22g2c-tool-toggle%22%2B(r%3F%22%20on%22%3A%22%22)%2Ce.textContent%3Dr%3F%22ON%22%3A%22OFF%22%2Cs(%22Camera%20%22%2B(r%3F%22enabled%22%3A%22disabled%22)%2C%22success%22)%2Ct%26%26(t.style.display%3D%22block%22%2Ct.textContent%3Dr%3F%22%E2%9C%85%20Enabled!%20Refresh%20the%20page%20(F5)%20to%20see%20the%20camera%20icon%22%3A%22Disabled.%20Refresh%20the%20page%20to%20remove%20the%20camera%20icon%22%2CsetTimeout(function()%7Bt%26%26(t.style.display%3D%22none%22)%7D%2C8e3))%7Dcatch(t)%7Be.className%3D%22g2c-tool-toggle%22%2Ce.textContent%3D%22Error%22%2Cs(%22Camera%20toggle%20failed%3A%20%22%2Bt.message%2C%22error%22)%2CsetTimeout(function()%7Be%26%26(e.textContent%3D%22Retry%22)%7D%2C2e3)%7D%7D%7D)%7D()%3B"
+           onclick="event.preventDefault();alert('Don\'t click — drag this button up to your bookmark bar!');">
+          📦 GPT→Claude Export
+        </a>
+        <p class="drag-hint"><strong>Drag</strong> the button above to your bookmark bar.<br>No bookmark bar? Press <strong>Ctrl+Shift+B</strong></p>
+      </div>
+      <div class="install-steps">
+        <div class="install-step"><div class="install-step-num">1</div><p>Drag the gold button above into your <strong>bookmark bar</strong></p></div>
+        <div class="install-step"><div class="install-step-num">2</div><p>Go to <a href="https://chatgpt.com" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:600;">chatgpt.com</a> and make sure you're logged in</p></div>
+        <div class="install-step"><div class="install-step-num">3</div><p>Click the <strong>GPT→Claude Export</strong> bookmark — a panel appears on the page</p></div>
+        <div class="install-step"><div class="install-step-num">4</div><p>Click the export buttons. Files download to your computer automatically.</p></div>
+      </div>
+    </div>
+
+    <!-- FIREFOX TAB -->
+    <div class="tab-content" id="tab-firefox">
+      <p style="font-size:0.85rem; color:#e07070; margin-bottom:1rem;">⚠️ Firefox can't use the bookmarklet (exceeds Firefox's 65KB URL limit). Use console paste instead — it's quick:</p>
+      <div class="install-steps">
+        <div class="install-step"><div class="install-step-num">1</div><p>Go to <a href="https://chatgpt.com" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:600;">chatgpt.com</a> and log in</p></div>
+        <div class="install-step"><div class="install-step-num">2</div><p>Press <strong>F12</strong> on your keyboard → click the <strong>Console</strong> tab</p></div>
+        <div class="install-step"><div class="install-step-num">3</div>
+          <div>
+            <p>If Firefox shows a warning about pasting, type <strong style="color:var(--accent);">allow pasting</strong> and press Enter</p>
+          </div>
+        </div>
+        <div class="install-step"><div class="install-step-num">4</div>
+          <div>
+            <p>Click the button below to copy the export script:</p>
+            <button class="action-btn" id="copy-firefox-script" style="margin-top:0.5rem;">📋 Copy export script</button>
+            <p class="copy-confirm" id="copy-firefox-confirm">✅ Copied! Now paste into the console.</p>
+          </div>
+        </div>
+        <div class="install-step"><div class="install-step-num">5</div><p>Paste (<strong>Ctrl+V</strong>) into the console and press <strong>Enter</strong>. The export panel appears!</p></div>
+      </div>
+    </div>
+
+    <!-- ANY BROWSER / PASTE TAB -->
+    <div class="tab-content" id="tab-paste">
+      <div class="install-steps">
+        <div class="install-step"><div class="install-step-num">1</div><p>Go to <a href="https://chatgpt.com" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:600;">chatgpt.com</a> and log in</p></div>
+        <div class="install-step"><div class="install-step-num">2</div><p>Press <strong>F12</strong> on your keyboard → click the <strong>Console</strong> tab</p></div>
+        <div class="install-step"><div class="install-step-num">3</div>
+          <div>
+            <p>Click the button below to copy the export script:</p>
+            <button class="action-btn" id="copy-full-script" style="margin-top:0.5rem;">📋 Copy export script</button>
+            <p class="copy-confirm" id="copy-script-confirm">✅ Copied! Now paste into the console.</p>
+          </div>
+        </div>
+        <div class="install-step"><div class="install-step-num">4</div><p>Click inside the console, press <strong>Ctrl+V</strong> to paste, then press <strong>Enter</strong></p></div>
+        <div class="install-step"><div class="install-step-num">5</div><p>The export panel appears on the ChatGPT page. Click the buttons to export.</p></div>
+      </div>
+      <p style="font-size:0.8rem; color:#555; margin-top:1rem;">Firefox users: if you see a warning about pasting, type <strong>allow pasting</strong> and press Enter first.</p>
+    </div>
+  </div>
+
+  <!-- ========== HOW TO USE ========== -->
+  <div class="steps">
+    <h2>What happens when you run it</h2>
+    <div class="step-list">
+      <div class="step-item">
+        <div class="step-num s1">1</div>
+        <div class="step-text"><h3>A floating panel appears</h3><p>Dark panel on the right side of the ChatGPT page with three export buttons. You can drag it around.</p></div>
+      </div>
+      <div class="step-item">
+        <div class="step-num s2">2</div>
+        <div class="step-text"><h3>Click each button to export</h3><p>Memories, conversations, and instructions. Each one downloads a file automatically. Conversations show a progress bar.</p></div>
+      </div>
+      <div class="step-item">
+        <div class="step-num s3">3</div>
+        <div class="step-text"><h3>Upload to Claude</h3><p>Go to <a href="https://claude.ai" style="color:var(--accent)">claude.ai</a> (or the desktop app: <strong>+</strong> → <strong>Add files</strong>) and upload the downloaded files.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== WHAT YOU GET ========== -->
+  <div class="exports-section">
+    <h2>What you get</h2>
+    <div class="export-grid">
+      <div class="export-card">
+        <div class="icon">🧠</div>
+        <h3>Memories</h3>
+        <p>Every fact ChatGPT memorized about you.</p>
+        <span class="filename">chatgpt_memories.md</span>
+      </div>
+      <div class="export-card">
+        <div class="icon">💬</div>
+        <h3>Conversations</h3>
+        <p>Every chat with full history, timestamps, model info.</p>
+        <span class="filename">chatgpt_all_conversations.json</span>
+      </div>
+      <div class="export-card">
+        <div class="icon">⚙️</div>
+        <h3>Instructions</h3>
+        <p>Custom instructions and settings.</p>
+        <span class="filename">chatgpt_instructions.json</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== IMPORTING TO CLAUDE ========== -->
+  <div class="exports-section" id="importing">
+    <h2>Importing to Claude</h2>
+    <div class="step-list">
+      <div class="step-item">
+        <div class="step-num s1">1</div>
+        <div class="step-text">
+          <h3>Upload memories first</h3>
+          <p>Upload <strong>chatgpt_memories.md</strong> with this prompt:</p>
+          <p style="color:var(--accent); margin-top:0.5rem; font-style:italic;">"I just migrated from ChatGPT. This file contains all the facts and memories ChatGPT had stored about me. Please read through every item carefully and remember all of these facts about me. Confirm what you've learned and note if anything seems contradictory or outdated."</p>
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num s2">2</div>
+        <div class="step-text">
+          <h3>Upload conversations</h3>
+          <p>Upload <strong>chatgpt_all_conversations.json</strong> (zip it if large) with this prompt:</p>
+          <p style="color:var(--accent); margin-top:0.5rem; font-style:italic;">"This is my complete ChatGPT conversation history. Please analyze it and create a structured summary: (1) Key ongoing projects, (2) Important decisions, (3) Personal context and preferences, (4) Anything unfinished I should pick up."</p>
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num s3">3</div>
+        <div class="step-text">
+          <h3>Upload instructions</h3>
+          <p>Upload <strong>chatgpt_instructions.json</strong> with this prompt:</p>
+          <p style="color:var(--accent); margin-top:0.5rem; font-style:italic;">"These are my custom instructions from ChatGPT. Please adapt your communication style to match my preferences."</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== WHAT TO EXPECT ========== -->
+  <div class="exports-section" id="expectations">
+    <h2>What to expect after migrating</h2>
+    <div class="fallback-box">
+      <h3>Claude remembers the facts, but needs time to know <em>you</em></h3>
+      <p>Think of it like switching doctors. The new doctor has your complete file but doesn't <em>know</em> you yet. Claude gets roughly <strong>70%</strong> from the import. The rest — your humor, style, priorities — builds naturally over a couple of weeks.</p>
+      <p style="margin-bottom:0;"><strong>The upside:</strong> Claude calibrates to who you are <em>now</em>, not who you were two years ago.</p>
+    </div>
+    <div class="fallback-box">
+      <h3>Example conversations after import</h3>
+      <p style="color:var(--text);"><strong>You:</strong> "Remember that sourdough recipe we worked on?"</p>
+      <p style="color:var(--accent)"><strong>Claude:</strong> "Yes — 78% hydration, overnight cold proof. You said the crust was perfect but crumb too dense. We were going to try autolyse. Want to tweak it?"</p>
+      <p style="color:var(--text); margin-top:0.75rem;"><strong>You:</strong> "What was that movie you recommended?"</p>
+      <p style="color:var(--accent); margin-bottom:0;"><strong>Claude:</strong> "You asked for sci-fi that doesn't treat the audience like idiots. I suggested Arrival, Primer, and Coherence. You watched Primer and said it melted your brain."</p>
+    </div>
+  </div>
+
+  <!-- ========== FAQ ========== -->
+  <div class="faq">
+    <h2>Common questions</h2>
+    <div class="faq-item"><h3>How do I read the exported JSON?</h3><p>Open the <a href="viewer.html" style="color:var(--accent);text-decoration:none;font-weight:600;">Conversation Viewer</a> in your browser and drag your file into it. You can browse, sort, and search all your conversations in a chat-like format. Or upload the file to Claude and ask it to find what you're looking for.</p></div>
+    <div class="faq-item"><h3>Is this safe?</h3><p>Everything runs in your browser. No data is sent anywhere. Files save directly to your computer. Source code is open on GitHub.</p></div>
+    <div class="faq-item"><h3>How long does the conversation export take?</h3><p>~1 second per conversation. 500 chats ≈ 10 minutes. Don't close the tab.</p></div>
+    <div class="faq-item"><h3>Works with free ChatGPT?</h3><p>Yes. Free, Plus, Team, Enterprise — all work.</p></div>
+    <div class="faq-item"><h3>File too large for Claude?</h3><p>Zip it first. Right-click → Compress. Claude accepts .zip uploads.</p></div>
+    <div class="faq-item"><h3>Export stopped or errored?</h3><p>Usually a rate limit. Wait a minute, refresh <a href="https://chatgpt.com" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:700;">chatgpt.com</a>, try again. The tool retries automatically.</p></div>
+    <div class="faq-item"><h3>Will OpenAI ban me?</h3><p>You're accessing your own data through your own login session, using the same API the website uses. That said, these are undocumented endpoints.</p></div>
+    <div class="faq-item"><h3>Why not just use a browser extension?</h3><p>Extensions export conversations as text. This tool exports <strong>memory items</strong>, message metadata, timestamps, model info, and custom instructions — everything needed for a real migration.</p></div>
+  </div>
+
+  <!-- ========== FOOTER ========== -->
+  <div class="footer">
+    <p>GPT→Claude Migration Kit — built with <a href="https://claude.ai">Claude</a> by <a href="https://www.siamsnus.com">Siamsnus</a></p>
+    <p>Open source under MIT License — <a href="https://github.com/Siamsnus/GPT2Claude-Migration-Kit">View source on GitHub</a></p>
+    <p style="margin-top:0.75rem; font-size:0.72rem; color:#444;">OpenAI's internal API may change without notice. Not affiliated with OpenAI or Anthropic.</p>
+  </div>
+</div>
+
+<!-- Full script stored here for copy button -->
+<script id="migrate-source" type="text/plain">
+// GPT2Claude Migration Kit v2.7
+// https://github.com/Siamsnus/GPT2Claude-Migration-Kit
+// Exports ChatGPT memories, conversations, and instructions
+// No data leaves your browser - everything runs locally
+
+(function() {
+  // Prevent double-loading
+  if (document.getElementById("gpt2claude-panel")) {
+    var existing = document.getElementById("gpt2claude-panel");
+    existing.style.animation = "g2c-shake 0.3s ease-in-out";
+    setTimeout(function() { existing.style.animation = ""; }, 300);
+    return;
+  }
+
+  // ========== STYLES ==========
+  var style = document.createElement("style");
+  style.textContent = "\
+    @keyframes g2c-fadein { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }\
+    @keyframes g2c-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }\
+    @keyframes g2c-spin { to { transform: rotate(360deg); } }\
+    @keyframes g2c-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }\
+    @keyframes g2c-indeterminate { 0% { left: -30%; width: 30%; } 50% { left: 50%; width: 30%; } 100% { left: 100%; width: 30%; } }\
+    @keyframes g2c-pulse-count { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }\
+    @keyframes g2c-dot-bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }\
+    .g2c-progress-fill.indeterminate { position: relative; width: 100% !important; background: none !important; overflow: hidden; }\
+    .g2c-progress-fill.indeterminate::after { content: ''; position: absolute; top: 0; left: -30%; width: 30%; height: 100%; background: linear-gradient(90deg, transparent, #d4a574, transparent); border-radius: 3px; animation: g2c-indeterminate 1.5s ease-in-out infinite; }\
+    .g2c-scan-hero { text-align: center; padding: 20px 0 10px; }\
+    .g2c-scan-hero .g2c-scan-count { font-size: 42px; font-weight: 800; color: #d4a574; font-variant-numeric: tabular-nums; animation: g2c-pulse-count 2s ease-in-out infinite; line-height: 1; }\
+    .g2c-scan-hero .g2c-scan-label { font-size: 12px; color: #888; margin-top: 4px; }\
+    .g2c-scan-hero .g2c-scan-status { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 12px; font-size: 12px; color: #999; }\
+    .g2c-scan-dots { display: flex; gap: 3px; }\
+    .g2c-scan-dots span { width: 4px; height: 4px; background: #d4a574; border-radius: 50%; animation: g2c-dot-bounce 1.2s ease-in-out infinite; }\
+    .g2c-scan-dots span:nth-child(2) { animation-delay: 0.15s; }\
+    .g2c-scan-dots span:nth-child(3) { animation-delay: 0.3s; }\
+    .g2c-scan-models { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 14px; padding-top: 14px; border-top: 1px solid #2a2a35; }\
+    .g2c-scan-tag { font-size: 10px; padding: 3px 10px; background: #1e1e26; border: 1px solid #2a2a35; border-radius: 20px; color: #a0a0e0; font-family: 'SF Mono', Consolas, monospace; }\
+    .g2c-scan-reassure { font-size: 11px; color: #555; text-align: center; margin-top: 12px; }\
+    .g2c-dl-hero { text-align: center; padding: 16px 0 8px; }\
+    .g2c-dl-hero .g2c-dl-count { font-size: 28px; font-weight: 700; color: #7eb8a0; }\
+    .g2c-dl-hero .g2c-dl-of { font-size: 14px; color: #555; }\
+    .g2c-dl-hero .g2c-dl-title { font-size: 11px; color: #888; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }\
+    .g2c-dl-pct { font-size: 11px; color: #d4a574; font-family: 'SF Mono', Consolas, monospace; text-align: right; margin-top: 6px; }\
+    .g2c-dl-remaining { font-size: 11px; color: #666; text-align: center; margin-top: 8px; }\
+    .g2c-complete { text-align: center; padding: 20px 0 10px; }\
+    .g2c-complete-icon { font-size: 36px; margin-bottom: 6px; }\
+    .g2c-complete-title { font-size: 18px; font-weight: 700; color: #7eb8a0; }\
+    .g2c-complete-sub { font-size: 12px; color: #888; margin-top: 6px; }\
+    .g2c-complete-models { font-size: 11px; color: #d4a574; margin-top: 6px; font-family: 'SF Mono', Consolas, monospace; }\
+.g2c-complete-models-wrap { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 12px; }\
+.g2c-models-extra { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; width: 100%; margin-top: 4px; }\
+.g2c-models-toggle { font-size: 10px; padding: 3px 10px; background: none; border: 1px dashed #333340; border-radius: 20px; color: #888; cursor: pointer; font-family: 'SF Mono', Consolas, monospace; }\
+.g2c-models-toggle:hover { border-color: #d4a574; color: #d4a574; }\
+    .g2c-whatsnext { margin: 16px 0; padding: 14px; background: #141418; border: 1px solid #252530; border-radius: 10px; }\
+    .g2c-whatsnext-title { font-size: 11px; color: #888; margin-bottom: 10px; font-weight: 600; }\
+    .g2c-whatsnext-item { font-size: 12px; color: #ccc; line-height: 1.8; margin-bottom: 10px; }\
+    .g2c-whatsnext-item:last-child { margin-bottom: 0; }\
+    .g2c-whatsnext-item a { color: #d4a574; text-decoration: none; }\
+    .g2c-whatsnext-item a:hover { text-decoration: underline; }\
+    .g2c-whatsnext-badge { font-size: 10px; color: #7eb8a0; background: rgba(126,184,160,0.12); padding: 1px 6px; border-radius: 4px; }\
+    .g2c-copy-log { background: none; border: none; color: #666; font-size: 11px; cursor: pointer; padding: 6px 0; margin-top: 10px; margin-left: 12px; }\
+    .g2c-copy-log:hover { color: #aaa; }\
+    #gpt2claude-panel { position: fixed; top: 50%; right: 24px; transform: translateY(-50%); width: 360px; background: #1a1a1f; border: 1px solid #333340; border-radius: 16px; box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06); z-index: 999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e8e8ec; animation: g2c-fadein 0.3s ease-out; }\
+    #gpt2claude-panel * { box-sizing: border-box; margin: 0; padding: 0; }\
+    .g2c-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 14px; border-bottom: 1px solid #2a2a35; background: #1e1e24; border-radius: 16px 16px 0 0; }\
+    .g2c-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }\
+    .g2c-title span.gpt { color: #a0a0e0; }\
+    .g2c-title span.arrow { color: #555; margin: 0 4px; }\
+    .g2c-title span.claude { color: #d4a574; }\
+    .g2c-version { font-size: 10px; color: #666; font-weight: 600; margin-top: 2px; }\
+    .g2c-close { background: none; border: none; color: #777; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px; line-height: 1; }\
+    .g2c-close:hover { background: #252530; color: #e8e8ec; }\
+    .g2c-body { padding: 18px 22px 14px; }\
+    .g2c-btn { width: 100%; padding: 14px 16px; border: 1px solid #333340; border-radius: 12px; background: #222228; color: #e8e8ec; font-size: 13px; font-weight: 600; cursor: pointer; text-align: left; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; transition: all 0.15s ease; position: relative; overflow: hidden; }\
+    .g2c-btn:hover { background: #2a2a32; border-color: #444450; transform: translateY(-1px); }\
+    .g2c-btn:active { transform: translateY(0); }\
+    .g2c-btn.running { pointer-events: none; border-color: #d4a574; }\
+    .g2c-btn.done { border-color: #7eb8a0; }\
+    .g2c-btn.error { border-color: #e07070; }\
+    .g2c-btn-icon { font-size: 20px; width: 28px; text-align: center; flex-shrink: 0; }\
+    .g2c-btn-text { flex: 1; }\
+    .g2c-btn-sub { font-size: 11px; color: #777; font-weight: 400; margin-top: 3px; }\
+    .g2c-progress { margin-top: 10px; }\
+    .g2c-progress-bar { width: 100%; height: 5px; background: #252530; border-radius: 3px; overflow: hidden; }\
+    .g2c-progress-fill { height: 100%; background: linear-gradient(90deg, #d4a574, #e8c49a); border-radius: 3px; transition: width 0.3s ease; width: 0%; }\
+    .g2c-progress-text { font-size: 11px; color: #999; margin-top: 6px; }\
+    .g2c-log { margin-top: 14px; max-height: 140px; overflow-y: auto; background: #141418; border: 1px solid #252530; border-radius: 10px; padding: 10px 12px; font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; line-height: 1.6; color: #999; display: none; }\
+    .g2c-log.visible { display: block; }\
+    .g2c-log-entry { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1px 0; }\
+    .g2c-log-entry.error { color: #e07070; }\
+    .g2c-log-entry.success { color: #7eb8a0; }\
+    .g2c-footer { padding: 14px 22px; border-top: 1px solid #252530; display: flex; justify-content: space-between; align-items: center; }\
+    .g2c-footer-text { font-size: 10px; color: #555; }\
+    .g2c-footer-link { font-size: 10px; color: #d4a574; text-decoration: none; }\
+    .g2c-footer-link:hover { text-decoration: underline; }\
+    .g2c-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #444; border-top-color: #d4a574; border-radius: 50%; animation: g2c-spin 0.6s linear infinite; }\
+    .g2c-toggle-log { background: none; border: none; color: #666; font-size: 11px; cursor: pointer; padding: 6px 0; margin-top: 10px; }\
+    .g2c-toggle-log:hover { color: #aaa; }\
+    .g2c-drag-handle { cursor: move; }\
+    .g2c-divider { height: 1px; background: #2a2a35; margin: 6px 0 10px; }\
+    .g2c-tool-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #1e1e26; border: 1px solid #252530; border-radius: 10px; margin-bottom: 6px; }\
+    .g2c-tool-label { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 8px; }\
+    .g2c-tool-label .icon { font-size: 16px; }\
+    .g2c-tool-label .sub { font-size: 10px; color: #666; display: block; }\
+    .g2c-tool-toggle { padding: 4px 12px; border-radius: 6px; border: 1px solid #333340; background: #222228; color: #999; font-size: 11px; cursor: pointer; font-weight: 600; transition: all 0.15s; }\
+    .g2c-tool-toggle:hover { border-color: #d4a574; color: #d4a574; }\
+    .g2c-tool-toggle.on { border-color: #7eb8a0; color: #7eb8a0; background: rgba(126,184,160,0.08); }\
+    .g2c-tool-toggle.checking { pointer-events: none; color: #555; }\
+    .g2c-tool-note { font-size: 10px; color: #7eb8a0; text-align: center; padding: 4px 0 2px; display: none; }\
+    .g2c-filter-panel { margin-top: 10px; }\
+    .g2c-filter-section { margin-bottom: 12px; }\
+    .g2c-filter-label { font-size: 10px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }\
+    .g2c-filter-models { max-height: 120px; overflow-y: auto; background: #141418; border: 1px solid #252530; border-radius: 8px; padding: 6px 8px; }\
+    .g2c-model-row { display: flex; align-items: center; padding: 3px 0; font-size: 12px; cursor: pointer; color: #ccc; }\
+    .g2c-model-row:hover { color: #fff; }\
+    .g2c-model-row input { margin-right: 8px; accent-color: #d4a574; }\
+    .g2c-model-row .cnt { color: #666; margin-left: auto; font-size: 10px; font-family: monospace; }\
+    .g2c-filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }\
+    .g2c-filter-input { flex: 1; padding: 6px 8px; background: #141418; border: 1px solid #252530; border-radius: 6px; color: #e8e8ec; font-size: 12px; font-family: monospace; outline: none; }\
+    .g2c-filter-input:focus { border-color: #d4a574; }\
+    .g2c-filter-input::placeholder { color: #555; }\
+    .g2c-filter-summary { font-size: 12px; color: #d4a574; padding: 8px 0; font-weight: 600; }\
+    .g2c-filter-drop { border: 1px dashed #333340; border-radius: 8px; padding: 10px; text-align: center; font-size: 11px; color: #666; cursor: pointer; transition: all 0.15s; }\
+    .g2c-filter-drop:hover { border-color: #d4a574; color: #999; }\
+    .g2c-filter-drop.active { border-color: #7eb8a0; color: #7eb8a0; }\
+    .g2c-select-btns { display: flex; gap: 6px; margin-top: 4px; }\
+    .g2c-select-btns button { background: none; border: none; color: #666; font-size: 10px; cursor: pointer; padding: 0; }\
+    .g2c-select-btns button:hover { color: #d4a574; }\
+  ";
+  document.head.appendChild(style);
+
+  // ========== PANEL HTML ==========
+  var panel = document.createElement("div");
+  panel.id = "gpt2claude-panel";
+  panel.innerHTML = '\
+    <div class="g2c-header g2c-drag-handle">\
+      <div>\
+        <div class="g2c-title"><span class="gpt">GPT</span><span class="arrow">\u2192</span><span class="claude">Claude</span></div>\
+        <div class="g2c-version">Migration Kit v2.7</div>\
+      </div>\
+      <button class="g2c-close" id="g2c-close">\u00D7</button>\
+    </div>\
+    <div class="g2c-body">\
+      <button class="g2c-btn" id="g2c-btn-memory">\
+        <div class="g2c-btn-icon">\uD83E\uDDE0</div>\
+        <div class="g2c-btn-text">\
+          Export Memories\
+          <div class="g2c-btn-sub">Facts ChatGPT learned about you</div>\
+        </div>\
+      </button>\
+      <button class="g2c-btn" id="g2c-btn-convos">\
+        <div class="g2c-btn-icon">\uD83D\uDCAC</div>\
+        <div class="g2c-btn-text">\
+          Export All Conversations\
+          <div class="g2c-btn-sub">Scans first, then you choose what to download</div>\
+        </div>\
+      </button>\
+      <button class="g2c-btn" id="g2c-btn-instructions">\
+        <div class="g2c-btn-icon">\u2699\uFE0F</div>\
+        <div class="g2c-btn-text">\
+          Export Instructions\
+          <div class="g2c-btn-sub">Custom instructions &amp; settings</div>\
+        </div>\
+      </button>\
+      <button class="g2c-btn" id="g2c-btn-all" style="border-color:#d4a574;background:#222228;">\
+        <div class="g2c-btn-icon">\uD83D\uDCE5</div>\
+        <div class="g2c-btn-text">\
+          <span style="color:#d4a574;">Export Everything</span>\
+          <div class="g2c-btn-sub">All three in one click</div>\
+        </div>\
+      </button>\
+      <div class="g2c-divider" id="g2c-camera-divider"></div>\
+      <div class="g2c-tool-row" id="g2c-camera-row">\
+        <div class="g2c-tool-label">\
+          <span class="icon">\uD83D\uDCF7</span>\
+          <span>Desktop Camera<span class="sub">Chromium only (Chrome, Brave, Edge)</span></span>\
+        </div>\
+        <button class="g2c-tool-toggle" id="g2c-camera-btn">Check</button>\
+      </div>\
+      <div class="g2c-tool-note" id="g2c-camera-note"></div>\
+      <div class="g2c-progress" id="g2c-progress" style="display:none;">\
+        <div class="g2c-progress-bar"><div class="g2c-progress-fill" id="g2c-progress-fill"></div></div>\
+        <div class="g2c-progress-text" id="g2c-progress-text"></div>\
+      </div>\
+      <button class="g2c-toggle-log" id="g2c-toggle-log">Show log \u25BC</button>\
+      <button class="g2c-copy-log" id="g2c-copy-log">Copy log</button>\
+      <div class="g2c-log" id="g2c-log"></div>\
+    </div>\
+    <div class="g2c-footer">\
+      <span class="g2c-footer-text">All data stays in your browser</span>\
+      <a class="g2c-footer-link" href="https://github.com/Siamsnus/GPT2Claude-Migration-Kit" target="_blank">GitHub</a>\
+    </div>\
+  ';
+  document.body.appendChild(panel);
+
+  // ========== DRAGGING ==========
+  var isDragging = false;
+  var dragOffsetX = 0;
+  var dragOffsetY = 0;
+  var header = panel.querySelector(".g2c-drag-handle");
+
+  header.addEventListener("mousedown", function(e) {
+    if (e.target.classList.contains("g2c-close")) return;
+    isDragging = true;
+    var rect = panel.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+    panel.style.transition = "none";
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", function(e) {
+    if (!isDragging) return;
+    panel.style.right = "auto";
+    panel.style.transform = "none";
+    panel.style.left = (e.clientX - dragOffsetX) + "px";
+    panel.style.top = (e.clientY - dragOffsetY) + "px";
+  });
+
+  document.addEventListener("mouseup", function() {
+    isDragging = false;
+    panel.style.transition = "";
+  });
+
+  // ========== HELPERS ==========
+  var logEl = document.getElementById("g2c-log");
+  var progressEl = document.getElementById("g2c-progress");
+  var progressFill = document.getElementById("g2c-progress-fill");
+  var progressText = document.getElementById("g2c-progress-text");
+
+  function log(msg, type) {
+    var entry = document.createElement("div");
+    entry.className = "g2c-log-entry" + (type ? " " + type : "");
+    entry.textContent = msg;
+    logEl.appendChild(entry);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setProgress(pct, text) {
+    progressEl.style.display = "block";
+    progressFill.style.width = pct + "%";
+    if (text) progressText.textContent = text;
+  }
+
+  function setButtonState(btn, state, label) {
+    btn.className = "g2c-btn " + state;
+    var iconEl = btn.querySelector(".g2c-btn-icon");
+    if (state === "running") {
+      iconEl.innerHTML = '<div class="g2c-spinner"></div>';
+    } else if (state === "done") {
+      iconEl.textContent = "\u2705";
+    } else if (state === "error") {
+      iconEl.textContent = "\u274C";
+    }
+    if (label) {
+      btn.querySelector(".g2c-btn-sub").textContent = label;
+    }
+  }
+
+  function downloadFile(content, filename, type) {
+    var blob = new Blob([content], {type: type || "text/plain"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    log("Downloaded: " + filename, "success");
+  }
+
+  // Safe event listener helper — guards against null elements in ChatGPT's SPA
+  function safeAddEvent(id, event, handler) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.addEventListener(event, handler);
+    } else {
+      log("Warning: element #" + id + " not found", "error");
+    }
+    return el;
+  }
+
+  var cachedToken = null;
+
+  async function getToken() {
+    if (cachedToken) return cachedToken;
+    log("Authenticating...");
+    var resp = await fetch("https://chatgpt.com/api/auth/session", {credentials: "include"});
+    if (resp.status !== 200) {
+      throw new Error("Auth failed (HTTP " + resp.status + "). Are you logged in?");
+    }
+    var data = await resp.json();
+    if (!data.accessToken) {
+      throw new Error("No token found. Please refresh chatgpt.com and try again.");
+    }
+    cachedToken = data.accessToken;
+    log("Authenticated OK");
+    // Detect account type (async, non-blocking)
+    detectAccount(cachedToken);
+    return cachedToken;
+  }
+
+  // Account detection — plan type, workspace info
+  var cachedAccountInfo = null;
+  async function detectAccount(token) {
+    if (cachedAccountInfo) return cachedAccountInfo;
+    try {
+      var resp = await fetch("https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27", {
+        credentials: "include",
+        headers: {"Authorization": "Bearer " + token}
+      });
+      if (resp.status !== 200) {
+        log("Account check: HTTP " + resp.status);
+        return null;
+      }
+      var data = await resp.json();
+      var accounts = data.accounts || {};
+      var acctIds = Object.keys(accounts).filter(function(k) { return k !== "default"; });
+      if (acctIds.length === 0) return null;
+      var primary = accounts[acctIds[0]];
+      var acct = primary.account || {};
+      cachedAccountInfo = {
+        account_id: acct.account_id || acctIds[0],
+        plan_type: acct.plan_type || "unknown",
+        structure: acct.structure || "unknown",
+        workspace_type: acct.workspace_type || null,
+        organization_id: acct.organization_id || null,
+        is_hipaa: acct.is_hipaa_compliant_workspace || false,
+        features: primary.features || []
+      };
+      var label = cachedAccountInfo.plan_type.charAt(0).toUpperCase() + cachedAccountInfo.plan_type.slice(1);
+      var structLabel = cachedAccountInfo.structure === "personal" ? "personal" : cachedAccountInfo.structure;
+      if (cachedAccountInfo.workspace_type) structLabel += "/" + cachedAccountInfo.workspace_type;
+      log("Account: " + label + " (" + structLabel + ")");
+      if (cachedAccountInfo.structure !== "personal" && cachedAccountInfo.workspace_type) {
+        log("Workspace detected: " + cachedAccountInfo.workspace_type, "success");
+      }
+      return cachedAccountInfo;
+    } catch (e) {
+      log("Account detection: " + e.message);
+      return null;
+    }
+  }
+
+  // Extract model from conversation metadata — tries multiple field names
+  function getConvoModel(c) {
+    return c.default_model_slug || c.model || c.model_slug || c.gpt_model || "unknown";
+  }
+
+  // Extract timestamp from conversation — handles epoch (seconds or ms) and ISO strings
+  function getConvoTime(c) {
+    var raw = c.update_time || c.updated_at || c.create_time || c.created_at || 0;
+    if (!raw) return 0;
+    if (typeof raw === "string") {
+      // ISO date string
+      var parsed = new Date(raw).getTime() / 1000;
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    // Epoch: if > 1e12 it's milliseconds, convert to seconds
+    if (raw > 1e12) return raw / 1000;
+    return raw;
+  }
+
+  // ========== EXPORT: MEMORIES ==========
+  async function exportMemories() {
+    var btn = document.getElementById("g2c-btn-memory");
+    setButtonState(btn, "running", "Exporting...");
+
+    try {
+      var token = await getToken();
+
+      log("Fetching memories...");
+      var resp = await fetch("https://chatgpt.com/backend-api/memories?include_memory_entries=true", {
+        credentials: "include",
+        headers: {"Authorization": "Bearer " + token}
+      });
+
+      if (resp.status !== 200) {
+        throw new Error("Could not fetch memories (HTTP " + resp.status + ")");
+      }
+
+      var data = await resp.json();
+      var memories = data.memories || data.results || data;
+      var md = "# ChatGPT Memory Export\n";
+      md += "# Exported: " + new Date().toISOString() + "\n";
+      md += "# Tool: GPT2Claude Migration Kit v2.7\n";
+      if (data.memory_num_tokens) md += "# Tokens used: " + data.memory_num_tokens + " / " + (data.memory_max_tokens || "?") + "\n";
+      md += "\n";
+
+      var count = 0;
+      var warmCount = 0;
+      var coldCount = 0;
+      if (Array.isArray(memories)) {
+        count = memories.length;
+        // Sort: warm first, then cold
+        memories.sort(function(a, b) {
+          if (a.status === "warm" && b.status !== "warm") return -1;
+          if (a.status !== "warm" && b.status === "warm") return 1;
+          return 0;
+        });
+        for (var i = 0; i < memories.length; i++) {
+          var m = memories[i];
+          var content = m.content || m.value || m.text || m.memory || JSON.stringify(m);
+          var status = m.status || "unknown";
+          if (status === "warm") warmCount++;
+          else if (status === "cold") coldCount++;
+          var tag = status === "cold" ? " [older/less relevant]" : "";
+          md += (i + 1) + ". " + content + tag + "\n";
+        }
+      } else {
+        md += JSON.stringify(memories, null, 2);
+      }
+
+      var summary = count + " memories (" + warmCount + " active" + (coldCount > 0 ? ", " + coldCount + " older" : "") + ")";
+      log("Found " + summary);
+      downloadFile(md, "chatgpt_memories.md", "text/markdown");
+      setButtonState(btn, "done", summary);
+
+    } catch (err) {
+      log("Memory export failed: " + err.message, "error");
+      setButtonState(btn, "error", err.message);
+    }
+  }
+
+  // ========== EXPORT: CONVERSATIONS ==========
+  var scannedConvos = [];
+  var previousExportIds = {};
+  var BATCH_SIZE = 10;
+
+  async function exportConversations() {
+    var btn = document.getElementById("g2c-btn-convos");
+    setButtonState(btn, "running", "Scanning...");
+
+    // Show indeterminate progress
+    var progressEl = document.getElementById("g2c-progress");
+    progressEl.style.display = "block";
+    var fillEl = document.getElementById("g2c-progress-fill");
+    fillEl.classList.add("indeterminate");
+    fillEl.style.width = "100%";
+
+    // Insert scan hero display (State 2)
+    var scanHero = document.createElement("div");
+    scanHero.className = "g2c-scan-hero";
+    scanHero.id = "g2c-scan-hero";
+    scanHero.innerHTML = '<div class="g2c-scan-count" id="g2c-scan-count">0</div>' +
+      '<div class="g2c-scan-label">conversations found</div>' +
+      '<div class="g2c-scan-status" id="g2c-scan-status">' +
+        '<span class="g2c-scan-dots"><span></span><span></span><span></span></span>' +
+        ' Scanning your conversations\u2026' +
+      '</div>' +
+      '<div class="g2c-scan-models" id="g2c-scan-models"></div>' +
+      '<div class="g2c-scan-reassure">Filter options appear when scan completes</div>';
+    progressEl.parentNode.insertBefore(scanHero, progressEl.nextSibling);
+
+    try {
+      var token = await getToken();
+      var headers = {"Authorization": "Bearer " + token};
+      scannedConvos = [];
+      var offset = 0;
+      var liveModels = {};
+      var scanLimit = 100;
+
+      log("Scanning conversation list...");
+
+      while (true) {
+        var listResp = await fetch(
+          "https://chatgpt.com/backend-api/conversations?offset=" + offset + "&limit=" + scanLimit + "&order=updated",
+          {credentials: "include", headers: headers}
+        );
+
+        if (listResp.status !== 200) {
+          throw new Error("Could not get conversations (HTTP " + listResp.status + ")");
+        }
+
+        var listData = await listResp.json();
+        var items = listData.items || [];
+        log("Batch: " + items.length + " conversations (offset " + offset + ")");
+
+        // Log first item's keys for diagnostics
+        if (offset === 0 && items.length > 0) {
+          var sampleKeys = Object.keys(items[0]).join(", ");
+          log("API fields: " + sampleKeys);
+          var sample = items[0];
+          log("Sample model: " + (sample.default_model_slug || sample.model || sample.model_slug || "null"));
+          log("Sample time: update=" + sample.update_time + " create=" + sample.create_time);
+          log("Sample gizmo: " + (sample.gizmo_id || sample.conversation_template_id || sample.workspace_id || "none"));
+        }
+
+        for (var j = 0; j < items.length; j++) {
+          scannedConvos.push(items[j]);
+          var m = getConvoModel(items[j]);
+          liveModels[m] = (liveModels[m] || 0) + 1;
+        }
+
+        // Update scan hero display
+        var countEl = document.getElementById("g2c-scan-count");
+        var statusEl = document.getElementById("g2c-scan-status");
+        if (countEl) countEl.textContent = scannedConvos.length.toLocaleString();
+        if (statusEl) {
+          statusEl.innerHTML = items.length >= scanLimit
+            ? '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Still scanning \u2014 this takes a minute, all good'
+            : 'Scan complete!';
+        }
+
+        // Update model tags
+        var tagsHtml = "";
+        var modelKeys = Object.keys(liveModels).sort(function(a, b) { return liveModels[b] - liveModels[a]; });
+        for (var mi = 0; mi < modelKeys.length; mi++) {
+          tagsHtml += '<span class="g2c-scan-tag">' + modelKeys[mi] + ' (' + liveModels[modelKeys[mi]] + ')</span>';
+        }
+        var modelsEl = document.getElementById("g2c-scan-models");
+        if (modelsEl) modelsEl.innerHTML = tagsHtml;
+
+        offset += items.length;
+        if (items.length < scanLimit) break;
+        await new Promise(function(r) { setTimeout(r, 500); });
+      }
+
+      log("Total conversations: " + scannedConvos.length);
+
+      // Discover and fetch project conversations via 5-method cascade
+      try {
+        log("Checking for projects...");
+        var statusEl = document.getElementById("g2c-scan-status");
+        if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Checking projects\u2026';
+
+        var discoveredProjects = {};
+        var discoveryMethods = [];
+
+        // Method 1: Conversation scan — check fetched conversations for gizmo_id fields
+        var method1Count = 0;
+        for (var gi = 0; gi < scannedConvos.length; gi++) {
+          var gid = scannedConvos[gi].gizmo_id || scannedConvos[gi].conversation_template_id || scannedConvos[gi].workspace_id || null;
+          if (gid && gid.indexOf("g-p-") === 0 && !discoveredProjects[gid]) {
+            discoveredProjects[gid] = null; // name unknown yet
+            method1Count++;
+          }
+        }
+        if (method1Count > 0) discoveryMethods.push("conversation scan");
+
+        // Method 2: /projects API — try the projects index endpoint (NEW)
+        var api404Count = 0;
+        try {
+          var projectsResp = await fetch(
+            "https://chatgpt.com/backend-api/projects",
+            {credentials: "include", headers: headers}
+          );
+          if (projectsResp.status === 200) {
+            var projectsData = await projectsResp.json();
+            var projectsList = projectsData.items || projectsData.projects || projectsData.list || [];
+            if (Array.isArray(projectsList)) {
+              var method2Count = 0;
+              for (var p2i = 0; p2i < projectsList.length; p2i++) {
+                var proj = projectsList[p2i].resource || projectsList[p2i].gizmo || projectsList[p2i];
+                var p2id = proj.id || proj.gizmo_id || proj.short_url || "";
+                if (p2id.indexOf("g-p-") === 0 && !discoveredProjects[p2id]) {
+                  var p2name = (proj.display && proj.display.name) || proj.name || proj.title || null;
+                  discoveredProjects[p2id] = p2name;
+                  method2Count++;
+                }
+              }
+              if (method2Count > 0) discoveryMethods.push("/projects API");
+            }
+          } else {
+            if (projectsResp.status === 404) api404Count++;
+            log("/projects API: HTTP " + projectsResp.status);
+          }
+        } catch (p2err) {
+          log("/projects API failed: " + p2err.message);
+        }
+
+        // Method 3: /gizmos/discovery/mine API — existing gizmos endpoint
+        try {
+          var gizmoResp = await fetch(
+            "https://chatgpt.com/backend-api/gizmos/discovery/mine",
+            {credentials: "include", headers: headers}
+          );
+          if (gizmoResp.status === 200) {
+            var gizmoData = await gizmoResp.json();
+            var gizmoItems = gizmoData.list || gizmoData.items || gizmoData.gizmos || [];
+            if (Array.isArray(gizmoItems)) {
+              var method3Count = 0;
+              for (var gmi = 0; gmi < gizmoItems.length; gmi++) {
+                var gizmo = gizmoItems[gmi].resource || gizmoItems[gmi].gizmo || gizmoItems[gmi];
+                var gizmoId = gizmo.id || gizmo.short_url || "";
+                if (gizmoId.indexOf("g-p-") === 0 || (gizmo.type && gizmo.type === "project")) {
+                  if (!discoveredProjects[gizmoId]) {
+                    var gName = (gizmo.display && gizmo.display.name) || gizmo.name || gizmo.title || null;
+                    discoveredProjects[gizmoId] = gName;
+                    method3Count++;
+                  }
+                }
+              }
+              if (method3Count > 0) discoveryMethods.push("/gizmos API");
+            }
+          } else {
+            if (gizmoResp.status === 404) api404Count++;
+            log("/gizmos API: HTTP " + gizmoResp.status);
+          }
+        } catch (apiErr) {
+          log("/gizmos API failed: " + apiErr.message);
+        }
+
+        // Warn if both API endpoints returned 404
+        if (api404Count >= 2) {
+          log("\u26a0\ufe0f Both project API endpoints returned 404 \u2014 relying on DOM/conversation discovery", "warn");
+        }
+
+        // Method 4: DOM scraping — 5 CSS selectors + deep fallback
+        var method4Count = 0;
+        var domSelectors = [
+          'a[href*="/g/g-p-"]',
+          'a[href*="/project/"]',
+          'nav a[href*="g-p-"]',
+          '[data-testid*="project"] a',
+          'li a[href*="g-p-"]'
+        ];
+        var domFoundIds = {};
+        for (var ds = 0; ds < domSelectors.length; ds++) {
+          try {
+            var domLinks = document.querySelectorAll(domSelectors[ds]);
+            for (var dl = 0; dl < domLinks.length; dl++) {
+              var domHref = domLinks[dl].getAttribute("href") || "";
+              var domMatch = domHref.match(/g-p-[a-f0-9]+/);
+              if (!domMatch) continue;
+              var domProjId = domMatch[0];
+              if (domFoundIds[domProjId] || discoveredProjects[domProjId]) continue;
+              if (domHref.indexOf("/c/") > -1) continue; // skip conversation links
+              var domSlug = domHref.match(/g-p-[a-f0-9]+-([^/]+)/);
+              var domText = domLinks[dl].textContent.trim();
+              var domName = domText || (domSlug ? domSlug[1].replace(/-/g, " ") : null);
+              discoveredProjects[domProjId] = domName;
+              domFoundIds[domProjId] = true;
+              method4Count++;
+            }
+          } catch (selErr) {
+            // selector not supported, skip
+          }
+        }
+
+        // Deep fallback: scan ALL anchor elements for g-p- patterns
+        if (method4Count === 0) {
+          try {
+            var allAnchors = document.querySelectorAll("a[href]");
+            for (var aa = 0; aa < allAnchors.length; aa++) {
+              var aaHref = allAnchors[aa].getAttribute("href") || "";
+              if (aaHref.indexOf("g-p-") === -1) continue;
+              var aaMatch = aaHref.match(/g-p-[a-f0-9]+/);
+              if (!aaMatch) continue;
+              var aaProjId = aaMatch[0];
+              if (domFoundIds[aaProjId] || discoveredProjects[aaProjId]) continue;
+              if (aaHref.indexOf("/c/") > -1) continue;
+              var aaSlug = aaHref.match(/g-p-[a-f0-9]+-([^/]+)/);
+              var aaText = allAnchors[aa].textContent.trim();
+              var aaName = aaText || (aaSlug ? aaSlug[1].replace(/-/g, " ") : null);
+              discoveredProjects[aaProjId] = aaName;
+              domFoundIds[aaProjId] = true;
+              method4Count++;
+            }
+          } catch (deepErr) {
+            // deep scan failed, not critical
+          }
+        }
+        if (method4Count > 0) discoveryMethods.push("DOM");
+
+        // Method 5: __NEXT_DATA__ scan — extract project IDs from Next.js app state (NEW)
+        var method5Count = 0;
+        try {
+          var nextDataEl = document.getElementById("__NEXT_DATA__");
+          if (nextDataEl) {
+            var nextText = nextDataEl.textContent || nextDataEl.innerText || "";
+            var nextMatches = nextText.match(/g-p-[a-f0-9]+/g);
+            if (nextMatches) {
+              var nextSeen = {};
+              for (var nm = 0; nm < nextMatches.length; nm++) {
+                var nextId = nextMatches[nm];
+                if (nextSeen[nextId] || discoveredProjects[nextId]) continue;
+                nextSeen[nextId] = true;
+                discoveredProjects[nextId] = null;
+                method5Count++;
+              }
+              if (method5Count > 0) discoveryMethods.push("__NEXT_DATA__");
+            }
+          }
+        } catch (nextErr) {
+          // __NEXT_DATA__ not available or parse failed
+        }
+
+        var projIds = Object.keys(discoveredProjects);
+        if (projIds.length > 0) {
+          log("Found " + projIds.length + " project(s) via " + (discoveryMethods.length > 0 ? discoveryMethods.join(" + ") : "unknown"));
+
+          // Build index of existing conversation IDs for deduplication
+          var existingIdx = {};
+          for (var ei = 0; ei < scannedConvos.length; ei++) {
+            existingIdx[scannedConvos[ei].id] = ei;
+          }
+
+          var totalProjNew = 0;
+          var totalProjTagged = 0;
+
+          for (var pi = 0; pi < projIds.length; pi++) {
+            var projId = projIds[pi];
+            var projName = discoveredProjects[projId];
+
+            // Try to resolve project name if unknown
+            if (!projName) {
+              try {
+                var infoResp = await fetch(
+                  "https://chatgpt.com/backend-api/gizmos/" + projId,
+                  {credentials: "include", headers: headers}
+                );
+                if (infoResp.status === 200) {
+                  var infoData = await infoResp.json();
+                  var gizmoInfo = infoData.gizmo || infoData;
+                  projName = (gizmoInfo.display && gizmoInfo.display.name) || gizmoInfo.name || gizmoInfo.title || "Project";
+                  log("Resolved project name: " + projName);
+                }
+              } catch (nameErr) {
+                projName = "Project";
+              }
+              discoveredProjects[projId] = projName;
+            }
+
+            log("Fetching project: " + projName + " (" + projId + ")");
+            var statusEl = document.getElementById("g2c-scan-status");
+            if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Scanning project: ' + projName + '\u2026';
+
+            var cursor = 0;
+            var projConvoCount = 0;
+            var projTaggedCount = 0;
+            while (true) {
+              var projConvoResp = await fetch(
+                "https://chatgpt.com/backend-api/gizmos/" + projId + "/conversations?cursor=" + cursor,
+                {credentials: "include", headers: headers}
+              );
+              if (projConvoResp.status !== 200) {
+                log("Project " + projName + ": HTTP " + projConvoResp.status, "error");
+                break;
+              }
+              var projConvoData = await projConvoResp.json();
+              var projItems = projConvoData.items || [];
+              for (var pj = 0; pj < projItems.length; pj++) {
+                projItems[pj]._project = projName;
+                projItems[pj]._project_id = projId;
+
+                // Cross-discovery: check fetched conversations for new project IDs
+                var crossGid = projItems[pj].gizmo_id || null;
+                if (crossGid && crossGid.indexOf("g-p-") === 0 && !discoveredProjects[crossGid]) {
+                  discoveredProjects[crossGid] = null;
+                  projIds.push(crossGid); // add to queue — will be fetched in later iterations
+                  log("Cross-discovered project: " + crossGid);
+                }
+
+                // Only add if not already in main scan (deduplicate)
+                if (existingIdx[projItems[pj].id] === undefined) {
+                  scannedConvos.push(projItems[pj]);
+                  existingIdx[projItems[pj].id] = scannedConvos.length - 1;
+                  projConvoCount++;
+                } else {
+                  // Tag the existing entry as belonging to this project
+                  var dupIdx = existingIdx[projItems[pj].id];
+                  scannedConvos[dupIdx]._project = projName;
+                  scannedConvos[dupIdx]._project_id = projId;
+                  projTaggedCount++;
+                }
+              }
+              var countEl = document.getElementById("g2c-scan-count");
+              if (countEl) countEl.textContent = scannedConvos.length.toLocaleString();
+
+              // Cursor-based pagination: null cursor means no more pages
+              if (projConvoData.cursor === null || projConvoData.cursor === undefined || projItems.length === 0) break;
+              cursor = projConvoData.cursor;
+              await new Promise(function(r) { setTimeout(r, 500); });
+            }
+            log("Project " + projName + ": " + projConvoCount + " new, " + projTaggedCount + " tagged");
+            totalProjNew += projConvoCount;
+            totalProjTagged += projTaggedCount;
+          }
+          log("Projects total: " + totalProjNew + " new conversations from " + projIds.length + " project(s)");
+          log("Total with projects: " + scannedConvos.length);
+        } else {
+          // Smart hint: check if any conversations reference projects despite no discovery
+          var hasProjectRefs = false;
+          for (var hpr = 0; hpr < scannedConvos.length; hpr++) {
+            if (scannedConvos[hpr].gizmo_id && scannedConvos[hpr].gizmo_id.indexOf("g-p-") === 0) {
+              hasProjectRefs = true;
+              break;
+            }
+          }
+          if (hasProjectRefs) {
+            log("No projects discovered, but conversations contain project references. Try scrolling sidebar to load projects into DOM, then re-scan.");
+          } else {
+            log("No projects found");
+          }
+        }
+      } catch (projErr) {
+        log("Projects check failed: " + projErr.message + " (continuing without)");
+      }
+
+      // Discover shared conversations
+      try {
+        log("Checking shared conversations...");
+        var statusEl = document.getElementById("g2c-scan-status");
+        if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Checking shared conversations\u2026';
+
+        var sharedResp = await fetch(
+          "https://chatgpt.com/backend-api/shared_conversations?order=updated&limit=100&offset=0",
+          {credentials: "include", headers: headers}
+        );
+
+        if (sharedResp.status === 200) {
+          var sharedData = await sharedResp.json();
+          var sharedItems = sharedData.items || [];
+          var lastPageSize = sharedItems.length;
+          log("Shared: " + sharedItems.length + " fetched (page 1)");
+
+          // Paginate if last page was full (more pages likely exist)
+          // Hard cap at 50 pages (5,000 items) to prevent runaway pagination
+          var sharedOffset = sharedItems.length;
+          var sharedPages = 1;
+          var maxSharedPages = 50;
+          var sharedSeenIds = {};
+          for (var si0 = 0; si0 < sharedItems.length; si0++) sharedSeenIds[sharedItems[si0].id] = true;
+
+          while (lastPageSize >= 100 && sharedPages < maxSharedPages) {
+            if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Shared: ' + sharedItems.length + ' fetched\u2026';
+            var moreResp = await fetch(
+              "https://chatgpt.com/backend-api/shared_conversations?order=updated&limit=100&offset=" + sharedOffset,
+              {credentials: "include", headers: headers}
+            );
+            if (moreResp.status !== 200) {
+              log("Shared page HTTP " + moreResp.status + " — stopping pagination");
+              break;
+            }
+            var moreData = await moreResp.json();
+            var moreItems = moreData.items || [];
+            lastPageSize = moreItems.length;
+            if (moreItems.length === 0) break;
+
+            // Detect cycling — if we see IDs we already have, the API is looping
+            var dupeCount = 0;
+            for (var mi = 0; mi < moreItems.length; mi++) {
+              if (sharedSeenIds[moreItems[mi].id]) {
+                dupeCount++;
+              } else {
+                sharedSeenIds[moreItems[mi].id] = true;
+                sharedItems.push(moreItems[mi]);
+              }
+            }
+            sharedOffset += moreItems.length;
+            sharedPages++;
+
+            if (dupeCount > moreItems.length * 0.5) {
+              log("Shared: API returning duplicate items (" + dupeCount + "/" + moreItems.length + " dupes) — stopping");
+              break;
+            }
+
+            log("Shared: " + sharedItems.length + " unique fetched (page " + sharedPages + ")");
+            await new Promise(function(r) { setTimeout(r, 500); });
+          }
+
+          if (sharedPages >= maxSharedPages) {
+            log("Shared: hit " + maxSharedPages + " page cap — stopping (" + sharedItems.length + " items)");
+          }
+
+          // Build index of existing conversation IDs for deduplication (id → array index)
+          var existingIdIdx = {};
+          for (var ei = 0; ei < scannedConvos.length; ei++) {
+            existingIdIdx[scannedConvos[ei].id] = ei;
+          }
+
+          var newShared = 0;
+          var taggedShared = 0;
+          for (var si = 0; si < sharedItems.length; si++) {
+            var shared = sharedItems[si];
+            // Shared items might have conversation_id linking to a regular conversation
+            var sharedConvoId = shared.conversation_id || shared.id;
+            if (existingIdIdx[sharedConvoId] !== undefined) {
+              // Already in main list — tag it as shared using index lookup (O(1))
+              var tagIdx = existingIdIdx[sharedConvoId];
+              scannedConvos[tagIdx]._also_shared = true;
+              scannedConvos[tagIdx]._share_id = shared.share_id || shared.id;
+              taggedShared++;
+            } else {
+              // New shared conversation — add to scan list
+              shared._shared = true;
+              shared._share_id = shared.share_id || shared.id;
+              if (!shared.title) shared.title = shared.title || "Shared conversation";
+              scannedConvos.push(shared);
+              newShared++;
+            }
+          }
+
+          if (sharedItems.length > 0) {
+            log("Shared conversations: " + sharedItems.length + " found (" + newShared + " unique, " + taggedShared + " already in main)");
+          } else {
+            log("No shared conversations");
+          }
+
+          var countEl = document.getElementById("g2c-scan-count");
+          if (countEl) countEl.textContent = scannedConvos.length.toLocaleString();
+        } else if (sharedResp.status !== 404) {
+          log("Shared conversations: HTTP " + sharedResp.status + " (skipped)");
+        } else {
+          log("No shared conversations");
+        }
+      } catch (sharedErr) {
+        log("Shared conversations check: " + sharedErr.message + " (continuing without)");
+      }
+
+      // Discover archived conversations
+      try {
+        log("Checking archived conversations...");
+        var statusEl = document.getElementById("g2c-scan-status");
+        if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Checking archived conversations\u2026';
+
+        var archivedItems = [];
+        var archivedOffset = 0;
+        var archivedPage = 0;
+
+        while (true) {
+          archivedPage++;
+          var archivedResp = await fetch(
+            "https://chatgpt.com/backend-api/conversations?is_archived=true&limit=100&offset=" + archivedOffset,
+            {credentials: "include", headers: headers}
+          );
+          if (archivedResp.status !== 200) {
+            if (archivedPage === 1) log("Archived conversations: HTTP " + archivedResp.status + " (skipped)");
+            break;
+          }
+          var archivedData = await archivedResp.json();
+          var archivedPageItems = archivedData.items || [];
+          if (archivedPageItems.length === 0) break;
+
+          for (var ai = 0; ai < archivedPageItems.length; ai++) {
+            archivedPageItems[ai]._archived = true;
+            archivedItems.push(archivedPageItems[ai]);
+          }
+
+          if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Archived: ' + archivedItems.length + ' fetched\u2026';
+          log("Archived: " + archivedItems.length + " fetched (page " + archivedPage + ")");
+
+          if (archivedPageItems.length < 100) break;
+          archivedOffset += archivedPageItems.length;
+          await new Promise(function(r) { setTimeout(r, 500); });
+        }
+
+        if (archivedItems.length > 0) {
+          // Deduplicate against main scan list
+          var existingIdArchive = {};
+          for (var eai = 0; eai < scannedConvos.length; eai++) {
+            existingIdArchive[scannedConvos[eai].id] = eai;
+          }
+
+          var newArchived = 0;
+          var taggedArchived = 0;
+          for (var ari = 0; ari < archivedItems.length; ari++) {
+            var archItem = archivedItems[ari];
+            if (existingIdArchive[archItem.id] !== undefined) {
+              // Already in main list — tag it as archived
+              var archIdx = existingIdArchive[archItem.id];
+              scannedConvos[archIdx]._archived = true;
+              taggedArchived++;
+            } else {
+              scannedConvos.push(archItem);
+              newArchived++;
+            }
+          }
+
+          log("Archived conversations: " + archivedItems.length + " found (" + newArchived + " new, " + taggedArchived + " already in main)");
+          var countEl = document.getElementById("g2c-scan-count");
+          if (countEl) countEl.textContent = scannedConvos.length.toLocaleString();
+        } else {
+          log("No archived conversations");
+        }
+      } catch (archiveErr) {
+        log("Archived conversations check: " + archiveErr.message + " (continuing without)");
+      }
+
+      // Show filter panel
+      setButtonState(btn, "done", scannedConvos.length + " conversations found");
+
+      // Clean up scan hero display
+      var scanHeroEl = document.getElementById("g2c-scan-hero");
+      if (scanHeroEl) scanHeroEl.parentNode.removeChild(scanHeroEl);
+      var fillEl = document.getElementById("g2c-progress-fill");
+      fillEl.classList.remove("indeterminate");
+      fillEl.style.width = "0%";
+      document.getElementById("g2c-progress").style.display = "none";
+
+      showFilterPanel();
+
+    } catch (err) {
+      log("Scan failed: " + err.message, "error");
+      setButtonState(btn, "error", err.message);
+    }
+  }
+
+  // ========== FILTER PANEL (State 3) ==========
+  function showFilterPanel() {
+    var models = {};
+    var oldest = Infinity;
+    var newest = 0;
+    var sources = {}; // Track main vs project conversations
+    for (var i = 0; i < scannedConvos.length; i++) {
+      var c = scannedConvos[i];
+      var m = getConvoModel(c);
+      models[m] = (models[m] || 0) + 1;
+      var t = getConvoTime(c);
+      if (t > 0 && t < oldest) oldest = t;
+      if (t > 0 && t > newest) newest = t;
+      // Track source
+      var src = c._archived ? "Archived" : (c._shared ? "Shared conversations" : (c._project || "Main conversations"));
+      sources[src] = (sources[src] || 0) + 1;
+    }
+    var modelKeys = Object.keys(models).sort(function(a, b) { return models[b] - models[a]; });
+
+    function tsToDate(ts) {
+      if (!ts || ts === Infinity) return "";
+      if (typeof ts === "string") {
+        // ISO string — just extract the date part
+        var d = new Date(ts);
+        if (isNaN(d.getTime())) return "";
+        return d.toISOString().slice(0, 10);
+      }
+      var d = new Date(ts > 1e12 ? ts : ts * 1000);
+      if (isNaN(d.getTime())) return "";
+      return d.toISOString().slice(0, 10);
+    }
+
+    var modelCheckboxes = "";
+    for (var i = 0; i < modelKeys.length; i++) {
+      var mk = modelKeys[i];
+      modelCheckboxes += '<label class="g2c-model-row"><input type="checkbox" checked data-model="' + mk + '"> ' + mk + '<span class="cnt">' + models[mk] + '</span></label>';
+    }
+
+    // Build source/project checkboxes
+    var sourceKeys = Object.keys(sources).sort(function(a, b) {
+      if (a === "Main conversations") return -1;
+      if (b === "Main conversations") return 1;
+      if (a === "Archived") return 1;
+      if (b === "Archived") return -1;
+      return sources[b] - sources[a];
+    });
+    var sourceCheckboxes = "";
+    var hasProjects = sourceKeys.length > 1;
+    for (var si = 0; si < sourceKeys.length; si++) {
+      var sk = sourceKeys[si];
+      var icon = sk === "Main conversations" ? "\uD83D\uDCAC" : (sk === "Shared conversations" ? "\uD83D\uDD17" : (sk === "Archived" ? "\uD83D\uDCE6" : "\uD83D\uDCC1"));
+      sourceCheckboxes += '<label class="g2c-model-row"><input type="checkbox" checked data-source="' + sk + '"> ' + icon + ' ' + sk + '<span class="cnt">' + sources[sk] + '</span></label>';
+    }
+
+    // Scan summary — show breakdown if applicable
+    var projCount = 0;
+    var projConvoCount = scannedConvos.filter(function(c) { return c._project; }).length;
+    var archivedCount = scannedConvos.filter(function(c) { return c._archived; }).length;
+    var sharedOnlyCount = scannedConvos.filter(function(c) { return c._shared; }).length;
+    for (var ski = 0; ski < sourceKeys.length; ski++) {
+      if (sourceKeys[ski] !== "Main conversations" && sourceKeys[ski] !== "Shared conversations" && sourceKeys[ski] !== "Archived") projCount++;
+    }
+    var mainCount = scannedConvos.length - projConvoCount - archivedCount - sharedOnlyCount;
+    var scanSummaryText = scannedConvos.length.toLocaleString() + '</span>' +
+      '<span style="font-size:12px;color:#888;"> conversations scanned</span>';
+    var breakdownParts = [];
+    if (mainCount > 0) breakdownParts.push(mainCount.toLocaleString() + ' main');
+    if (archivedCount > 0) breakdownParts.push(archivedCount + ' archived');
+    if (projConvoCount > 0) breakdownParts.push(projConvoCount + ' from ' + projCount + ' project' + (projCount > 1 ? 's' : ''));
+    if (sharedOnlyCount > 0) breakdownParts.push(sharedOnlyCount + ' shared');
+    if (breakdownParts.length > 1) {
+      scanSummaryText += '<div style="font-size:11px;color:#7eb8a0;margin-top:4px;">' + breakdownParts.join(' + ') + '</div>';
+    }
+    var scanSummary = '<div style="text-align:center;margin-bottom:14px;">' +
+      '<span style="font-size:28px;font-weight:800;color:#7eb8a0;">' + scanSummaryText +
+      '</div>';
+
+    // Determine if model filter is useful (not just "unknown")
+    var hasRealModels = modelKeys.length > 1 || (modelKeys.length === 1 && modelKeys[0] !== "unknown");
+
+    var modelSection = '';
+    if (hasRealModels) {
+      modelSection = '\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Models</div>\
+          <div class="g2c-filter-models" id="g2c-filter-models">' + modelCheckboxes + '</div>\
+          <div class="g2c-select-btns"><button id="g2c-sel-all">Select all</button> \u00B7 <button id="g2c-sel-none">Select none</button></div>\
+        </div>';
+    }
+
+    var filterHtml = '\
+      <div class="g2c-filter-panel" id="g2c-filter-panel">\
+        ' + scanSummary + '\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Search conversations</div>\
+          <input type="text" class="g2c-filter-input" id="g2c-search" placeholder="Filter by title\u2026" style="width:100%;">\
+          <div style="font-size:10px;color:#555;margin-top:3px;">Filters by conversation title. Leave empty = all.</div>\
+        </div>\
+        ' + (hasProjects ? '\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Source</div>\
+          <div class="g2c-filter-models" id="g2c-filter-sources">' + sourceCheckboxes + '</div>\
+        </div>' : '') + '\
+        ' + modelSection + '\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Date range</div>\
+          <div class="g2c-filter-row">\
+            <input type="date" class="g2c-filter-input" id="g2c-date-from" value="' + tsToDate(oldest) + '">\
+            <span style="color:#555;">\u2192</span>\
+            <input type="date" class="g2c-filter-input" id="g2c-date-to" value="' + tsToDate(newest) + '">\
+          </div>\
+          <div class="g2c-select-btns" id="g2c-era-btns" style="flex-wrap:wrap;margin-top:4px;">\
+            <button data-era="all">All</button> \u00B7\
+            <button data-era="gpt35">GPT-3.5</button> \u00B7\
+            <button data-era="gpt4">GPT-4</button> \u00B7\
+            <button data-era="gpt4o">GPT-4o</button> \u00B7\
+            <button data-era="gpt5">GPT-5+</button>\
+          </div>\
+        </div>\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Max conversations (0 = all)</div>\
+          <input type="number" class="g2c-filter-input" id="g2c-limit" value="0" min="0" style="width:100%;">\
+        </div>\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Incremental export (skip already exported)</div>\
+          <div class="g2c-filter-drop" id="g2c-prev-drop">Drop or click to load previous export</div>\
+          <input type="file" id="g2c-prev-file" accept=".json" style="display:none;">\
+        </div>\
+        <div class="g2c-filter-summary" id="g2c-filter-summary">' + scannedConvos.length + ' conversations selected</div>\
+        <button class="g2c-btn" id="g2c-btn-download" style="border-color:#d4a574;margin-bottom:0;">\
+          <div class="g2c-btn-icon">\uD83D\uDCE5</div>\
+          <div class="g2c-btn-text"><span style="color:#d4a574;">Download ' + scannedConvos.length + ' conversations</span>\
+            <div class="g2c-btn-sub">~' + estimateTime(scannedConvos.length) + '</div>\
+          </div>\
+        </button>\
+      </div>';
+
+    // Insert filter panel — with fallback for SPA DOM issues
+    var bodyEl = panel.querySelector(".g2c-body");
+    if (!bodyEl) {
+      log("Warning: panel body not found", "error");
+      return;
+    }
+    var progressEl = document.getElementById("g2c-progress");
+    var filterDiv = document.createElement("div");
+    filterDiv.innerHTML = filterHtml;
+    var filterPanel = filterDiv.firstElementChild || filterDiv.firstChild;
+    if (progressEl && progressEl.parentNode) {
+      progressEl.parentNode.insertBefore(filterPanel, progressEl);
+    } else {
+      bodyEl.appendChild(filterPanel);
+    }
+
+    // Hide the main buttons — with null guards
+    var hideIds = ["g2c-btn-memory", "g2c-btn-convos", "g2c-btn-instructions", "g2c-btn-all", "g2c-camera-divider", "g2c-camera-row", "g2c-camera-note"];
+    for (var hi = 0; hi < hideIds.length; hi++) {
+      var hideEl = document.getElementById(hideIds[hi]);
+      if (hideEl) hideEl.style.display = "none";
+    }
+
+    // Wire up events using safeAddEvent (BUG FIX)
+    if (hasRealModels) {
+      safeAddEvent("g2c-sel-all", "click", function() {
+        var boxes = document.querySelectorAll("#g2c-filter-models input");
+        for (var i = 0; i < boxes.length; i++) boxes[i].checked = true;
+        updateFilterSummary();
+      });
+      safeAddEvent("g2c-sel-none", "click", function() {
+        var boxes = document.querySelectorAll("#g2c-filter-models input");
+        for (var i = 0; i < boxes.length; i++) boxes[i].checked = false;
+        updateFilterSummary();
+      });
+    }
+
+    safeAddEvent("g2c-prev-drop", "click", function() {
+      var fileInput = document.getElementById("g2c-prev-file");
+      if (fileInput) fileInput.click();
+    });
+
+    var filterInputs = document.querySelectorAll("#g2c-filter-models input, #g2c-filter-sources input, #g2c-date-from, #g2c-date-to, #g2c-limit");
+    for (var fi = 0; fi < filterInputs.length; fi++) {
+      filterInputs[fi].addEventListener("change", updateFilterSummary);
+    }
+    // Search box — live filtering as you type
+    var searchInput = document.getElementById("g2c-search");
+    if (searchInput) searchInput.addEventListener("input", updateFilterSummary);
+
+    // Era preset buttons
+    var eraRanges = {
+      "all": [tsToDate(oldest), tsToDate(newest)],
+      "gpt35": ["2022-11-30", "2023-03-13"],
+      "gpt4": ["2023-03-14", "2024-05-12"],
+      "gpt4o": ["2024-05-13", "2025-08-06"],
+      "gpt5": ["2025-08-07", tsToDate(newest)]
+    };
+    var eraBtns = document.querySelectorAll("#g2c-era-btns button");
+    for (var ei = 0; ei < eraBtns.length; ei++) {
+      eraBtns[ei].addEventListener("click", function() {
+        var era = this.getAttribute("data-era");
+        var range = eraRanges[era];
+        if (range) {
+          var fromEl = document.getElementById("g2c-date-from");
+          var toEl = document.getElementById("g2c-date-to");
+          if (fromEl) fromEl.value = range[0];
+          if (toEl) toEl.value = range[1];
+          // Highlight active era button
+          var siblings = document.querySelectorAll("#g2c-era-btns button");
+          for (var si = 0; si < siblings.length; si++) siblings[si].style.color = "";
+          this.style.color = "#d4a574";
+          updateFilterSummary();
+        }
+      });
+    }
+
+    safeAddEvent("g2c-prev-file", "change", function() {
+      if (this.files.length) loadPreviousExport(this.files[0]);
+    });
+    var dropEl = document.getElementById("g2c-prev-drop");
+    if (dropEl) {
+      dropEl.addEventListener("dragover", function(e) { e.preventDefault(); this.style.borderColor = "#d4a574"; });
+      dropEl.addEventListener("dragleave", function() { this.style.borderColor = ""; });
+      dropEl.addEventListener("drop", function(e) {
+        e.preventDefault();
+        this.style.borderColor = "";
+        if (e.dataTransfer.files.length) loadPreviousExport(e.dataTransfer.files[0]);
+      });
+    }
+
+    safeAddEvent("g2c-btn-download", "click", startFilteredDownload);
+
+    // Ensure all model and source checkboxes are programmatically checked (defensive)
+    var allBoxes = document.querySelectorAll("#g2c-filter-models input, #g2c-filter-sources input");
+    for (var bi = 0; bi < allBoxes.length; bi++) allBoxes[bi].checked = true;
+
+    // Force-recalculate summary after DOM is fully wired
+    updateFilterSummary();
+  }
+
+  function estimateTime(count) {
+    // Real-world calibration: 3361 convos = 29m34s = ~5.3s per batch of 10
+    // Using 5s per batch as conservative estimate
+    var secs = Math.ceil(count / BATCH_SIZE) * 5;
+    if (secs < 60) return "~" + Math.max(Math.round(secs), 1) + " seconds";
+    var mins = Math.round(secs / 60);
+    if (mins < 60) return "~" + mins + " minutes";
+    var hrs = (secs / 3600).toFixed(1);
+    return "~" + hrs + " hours";
+  }
+
+  function getFilteredConvos() {
+    try {
+      var selectedModels = {};
+      var boxes = document.querySelectorAll("#g2c-filter-models input");
+      for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i].checked) selectedModels[boxes[i].getAttribute("data-model")] = true;
+      }
+
+      // Source/project filter
+      var selectedSources = {};
+      var sourceBoxes = document.querySelectorAll("#g2c-filter-sources input");
+      for (var si = 0; si < sourceBoxes.length; si++) {
+        if (sourceBoxes[si].checked) selectedSources[sourceBoxes[si].getAttribute("data-source")] = true;
+      }
+      var hasSourceFilter = sourceBoxes.length > 0 && Object.keys(selectedSources).length > 0;
+
+      // If no models selected, return all (fail-open)
+      var hasModelFilter = Object.keys(selectedModels).length > 0;
+
+      var fromEl = document.getElementById("g2c-date-from");
+      var toEl = document.getElementById("g2c-date-to");
+      var limitEl = document.getElementById("g2c-limit");
+
+      var fromStr = fromEl ? fromEl.value : "";
+      var toStr = toEl ? toEl.value : "";
+      var fromTs = fromStr ? new Date(fromStr + "T00:00:00").getTime() / 1000 : 0;
+      var toTs = toStr ? new Date(toStr + "T23:59:59").getTime() / 1000 : Infinity;
+
+      var limit = limitEl ? (parseInt(limitEl.value) || 0) : 0;
+
+      // Search filter — client-side title matching
+      var searchEl = document.getElementById("g2c-search");
+      var searchText = searchEl ? searchEl.value.trim().toLowerCase() : "";
+
+      var filtered = [];
+      var mainCount = 0;
+      for (var i = 0; i < scannedConvos.length; i++) {
+        var c = scannedConvos[i];
+
+        // Search filter — match against title
+        if (searchText) {
+          var title = (c.title || "").toLowerCase();
+          if (title.indexOf(searchText) === -1) continue;
+        }
+
+        // Source filter
+        if (hasSourceFilter) {
+          var src = c._archived ? "Archived" : (c._shared ? "Shared conversations" : (c._project || "Main conversations"));
+          if (!selectedSources[src]) continue;
+        }
+
+        var model = getConvoModel(c);
+        if (hasModelFilter && !selectedModels[model]) continue;
+
+        var ts = getConvoTime(c);
+        if (ts > 0 && (ts < fromTs || ts > toTs)) continue;
+
+        if (previousExportIds[c.id]) continue;
+
+        // Limit only applies to main conversations — project convos always included
+        if (!c._project) {
+          if (limit > 0 && mainCount >= limit) continue;
+          mainCount++;
+        }
+
+        filtered.push(c);
+      }
+      return filtered;
+    } catch (err) {
+      log("Filter error: " + err.message, "error");
+      return scannedConvos; // fail-open: return all
+    }
+  }
+
+  function updateFilterSummary() {
+    var filtered = getFilteredConvos();
+    var summary = document.getElementById("g2c-filter-summary");
+    var dlBtn = document.getElementById("g2c-btn-download");
+    var skipped = Object.keys(previousExportIds).length;
+    var text = filtered.length + " conversations selected";
+    if (skipped > 0) text += " (" + skipped + " skipped from previous export)";
+    if (summary) summary.textContent = text;
+    if (dlBtn) {
+      var spanEl = dlBtn.querySelector(".g2c-btn-text span");
+      if (spanEl) spanEl.textContent = "Download " + filtered.length + " conversations";
+      var subEl = dlBtn.querySelector(".g2c-btn-sub");
+      if (subEl) subEl.textContent = estimateTime(filtered.length);
+    }
+  }
+
+  function loadPreviousExport(file) {
+    var dropEl = document.getElementById("g2c-prev-drop");
+    if (dropEl) dropEl.textContent = "Loading " + file.name + "...";
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var data = JSON.parse(e.target.result);
+        var convos = data.conversations || data || [];
+        if (Array.isArray(convos)) {
+          previousExportIds = {};
+          for (var i = 0; i < convos.length; i++) {
+            if (convos[i].id) previousExportIds[convos[i].id] = true;
+          }
+          if (dropEl) {
+            dropEl.textContent = "\u2705 " + Object.keys(previousExportIds).length + " conversations from previous export";
+            dropEl.className = "g2c-filter-drop active";
+          }
+          log("Loaded previous export: " + Object.keys(previousExportIds).length + " conversation IDs");
+          updateFilterSummary();
+        }
+      } catch (err) {
+        if (dropEl) dropEl.textContent = "\u274C Could not parse file";
+        log("Previous export error: " + err.message, "error");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ========== CONVERSATION PROCESSING HELPERS ==========
+  function extractNodeText(node) {
+    if (!node || !node.message || !node.message.content) return "";
+    var content = node.message.content;
+
+    // Handle special content types at the top level
+    var ct = content.content_type;
+    if (ct === "model_editable_context") return ""; // system memory, skip
+    if (ct === "thoughts") {
+      // Reasoning model thinking block — OpenAI hides actual CoT
+      return "[thinking]";
+    }
+    if (ct === "reasoning_recap") {
+      // "Thought for a few seconds" etc
+      return "[" + (content.content || "Thinking...") + "]";
+    }
+    if (ct === "code" || ct === "execution_output") {
+      var lang = content.language || "";
+      var codeText = content.text || "";
+      if (lang === "unknown" && codeText.indexOf("search(") === 0) {
+        return "[\uD83D\uDD0D " + codeText + "]";
+      }
+      return "```" + lang + "\n" + codeText + "\n```";
+    }
+
+    var parts = content.parts;
+    if (!Array.isArray(parts)) return JSON.stringify(content);
+    var textParts = [];
+    for (var p = 0; p < parts.length; p++) {
+      if (typeof parts[p] === "string") {
+        textParts.push(parts[p]);
+      } else if (parts[p] && typeof parts[p] === "object") {
+        if (parts[p].content_type === "image_asset_pointer" || parts[p].asset_pointer) {
+          var imgName = (parts[p].metadata && parts[p].metadata.dalle && parts[p].metadata.dalle.prompt)
+            ? "DALL-E: " + parts[p].metadata.dalle.prompt : "image";
+          textParts.push("[\uD83D\uDDBC " + imgName + "]");
+        }
+      }
+    }
+    return textParts.join("\n")
+      .replace(/\uE200cite(\uE202turn\dsearch\d+)+\uE201/g, "")
+      .replace(/\uE200image_group\uE202\{[^}]*\}\uE201/g, "[🖼 images]")
+      .replace(/\uE200[\s\S]*?\uE201/g, "");
+  }
+
+  function extractNodeRole(node) {
+    return (node.message && node.message.author && node.message.author.role) || "unknown";
+  }
+
+  function extractNodeModel(node) {
+    return (node.message && node.message.metadata && node.message.metadata.model_slug) || null;
+  }
+
+  function extractNodeTime(node) {
+    return (node.message && node.message.create_time) || null;
+  }
+
+  function processConversationDetail(detail, listItem) {
+    var messages = [];
+    var hasBranches = false;
+
+    if (detail.mapping) {
+      var mapKeys = Object.keys(detail.mapping);
+      var rootId = null;
+      for (var mk = 0; mk < mapKeys.length; mk++) {
+        if (!detail.mapping[mapKeys[mk]].parent) {
+          rootId = mapKeys[mk];
+          break;
+        }
+      }
+      if (!rootId) rootId = mapKeys[0];
+
+      var current = rootId;
+      var visited = {};
+      var safety = 0;
+
+      while (current && safety < 50000) {
+        safety++;
+        if (visited[current]) break;
+        visited[current] = true;
+        var node = detail.mapping[current];
+        if (!node) break;
+
+        if (node.message && node.message.content) {
+          var text = extractNodeText(node);
+          if (text.trim() !== "") {
+            var msgObj = {
+              role: extractNodeRole(node),
+              content: text,
+              timestamp: extractNodeTime(node),
+              model: extractNodeModel(node)
+            };
+
+            if (node.parent && detail.mapping[node.parent]) {
+              var parentNode = detail.mapping[node.parent];
+              if (parentNode.children && parentNode.children.length > 1) {
+                var alts = [];
+                for (var ci = 0; ci < parentNode.children.length; ci++) {
+                  var sibId = parentNode.children[ci];
+                  if (sibId === current) continue;
+                  var sib = detail.mapping[sibId];
+                  if (sib && sib.message && sib.message.content) {
+                    var sibText = extractNodeText(sib);
+                    if (sibText.trim()) {
+                      alts.push({
+                        content: sibText,
+                        role: extractNodeRole(sib),
+                        timestamp: extractNodeTime(sib),
+                        model: extractNodeModel(sib)
+                      });
+                    }
+                  }
+                }
+                if (alts.length > 0) {
+                  msgObj.alternatives = alts;
+                  hasBranches = true;
+                }
+              }
+            }
+
+            messages.push(msgObj);
+          }
+        }
+
+        if (node.children && node.children.length > 0) {
+          current = node.children[node.children.length - 1];
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Extract model from mapping metadata (since list API no longer provides it)
+    var model = detail.default_model_slug || null;
+    if (!model && detail.mapping) {
+      var mKeys = Object.keys(detail.mapping);
+      for (var mi = 0; mi < mKeys.length; mi++) {
+        var mNode = detail.mapping[mKeys[mi]];
+        if (mNode && mNode.message && mNode.message.metadata && mNode.message.metadata.model_slug) {
+          model = mNode.message.metadata.model_slug;
+          break;
+        }
+      }
+    }
+
+    return {
+      id: detail.conversation_id || (listItem && listItem.id) || detail.id,
+      title: detail.title || (listItem && listItem.title) || "Untitled",
+      create_time: detail.create_time || (listItem && listItem.create_time) || null,
+      update_time: detail.update_time || (listItem && listItem.update_time) || null,
+      model: model,
+      project: (listItem && listItem._project) || null,
+      project_id: (listItem && listItem._project_id) || null,
+      archived: (listItem && listItem._archived) || false,
+      memory_scope: (listItem && listItem.memory_scope) || null,
+      is_do_not_remember: (listItem && listItem.is_do_not_remember) || false,
+      has_branches: hasBranches,
+      _mapping_node_count: detail.mapping ? Object.keys(detail.mapping).length : 0,
+      message_count: messages.length,
+      messages: messages
+    };
+  }
+
+  // ========== FILTERED DOWNLOAD (States 4 & 5) ==========
+
+  function updateDlUI(completed, total, title, startTime) {
+    var pct = Math.round((completed / total) * 100);
+    var remaining = total - completed;
+
+    var dlCount = document.getElementById("g2c-dl-count");
+    var dlTitle = document.getElementById("g2c-dl-title");
+    var dlFill = document.getElementById("g2c-dl-fill");
+    var dlPct = document.getElementById("g2c-dl-pct");
+    var dlRemaining = document.getElementById("g2c-dl-remaining");
+    var dlMode = document.getElementById("g2c-dl-mode");
+
+    if (dlCount) dlCount.textContent = completed;
+    if (dlTitle) dlTitle.textContent = title;
+    if (dlFill) dlFill.style.width = pct + "%";
+    if (dlPct) dlPct.textContent = pct + "%";
+
+    if (dlRemaining && completed > 0) {
+      var elapsed = (Date.now() - startTime) / 1000;
+      var perItem = elapsed / completed;
+      var secsLeft = Math.round(perItem * remaining);
+      if (secsLeft < 60) {
+        dlRemaining.textContent = "~" + secsLeft + " seconds remaining";
+      } else {
+        dlRemaining.textContent = "~" + Math.round(secsLeft / 60) + " minutes remaining";
+      }
+    }
+  }
+
+  async function downloadBatch(ids, token) {
+    var resp = await fetch("https://chatgpt.com/backend-api/conversations/batch", {
+      method: "POST",
+      credentials: "include",
+      headers: {"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+      body: JSON.stringify({conversation_ids: ids})
+    });
+    return resp;
+  }
+
+  async function downloadSingle(id, token) {
+    var resp = await fetch("https://chatgpt.com/backend-api/conversation/" + id, {
+      credentials: "include",
+      headers: {"Authorization": "Bearer " + token}
+    });
+    return resp;
+  }
+
+  async function downloadShared(shareId, token) {
+    var resp = await fetch("https://chatgpt.com/backend-api/share/" + shareId, {
+      credentials: "include",
+      headers: {"Authorization": "Bearer " + token}
+    });
+    return resp;
+  }
+
+  async function startFilteredDownload() {
+    var filtered = getFilteredConvos();
+    if (filtered.length === 0) {
+      alert("No conversations selected. Adjust your filters.");
+      return;
+    }
+
+    // Separate shared conversations (can't use batch endpoint)
+    var regularConvos = [];
+    var sharedConvos = [];
+    for (var fi = 0; fi < filtered.length; fi++) {
+      if (filtered[fi]._shared) {
+        sharedConvos.push(filtered[fi]);
+      } else {
+        regularConvos.push(filtered[fi]);
+      }
+    }
+
+    // Replace filter panel with download hero UI (State 4)
+    var filterPanel = document.getElementById("g2c-filter-panel");
+    if (filterPanel) {
+      filterPanel.innerHTML = '\
+        <div class="g2c-dl-hero" id="g2c-dl-hero">\
+          <span class="g2c-dl-count" id="g2c-dl-count">0</span>\
+          <span class="g2c-dl-of" id="g2c-dl-of"> / ' + filtered.length + '</span>\
+          <div class="g2c-dl-title" id="g2c-dl-title">Starting download\u2026</div>\
+        </div>\
+        <div style="margin:10px 0;">\
+          <div class="g2c-progress-bar"><div class="g2c-progress-fill" id="g2c-dl-fill" style="width:0%;"></div></div>\
+          <div class="g2c-dl-pct" id="g2c-dl-pct">0%</div>\
+        </div>\
+        <div class="g2c-dl-remaining" id="g2c-dl-remaining"></div>\
+        <div class="g2c-dl-mode" id="g2c-dl-mode" style="text-align:center;font-size:10px;color:#666;margin-top:4px;"></div>';
+    }
+
+    var startTime = Date.now();
+
+    try {
+      var token = await getToken();
+
+      var fullExport = {
+        export_date: new Date().toISOString(),
+        tool: "GPT2Claude Migration Kit v2.7",
+        format_version: 7,
+        account: cachedAccountInfo || null,
+        total_conversations: filtered.length,
+        conversations: []
+      };
+
+      var successCount = 0;
+      var errorCount = 0;
+      var useBatch = true;
+
+      // Build ID-to-listItem lookup
+      var listLookup = {};
+      for (var li = 0; li < filtered.length; li++) {
+        listLookup[filtered[li].id] = filtered[li];
+      }
+
+      // ---- TRY BATCH MODE FIRST (regular conversations only) ----
+      if (regularConvos.length > 0) {
+      log("Using batch download (10 at a time)\u2026");
+      var dlMode = document.getElementById("g2c-dl-mode");
+      if (dlMode) dlMode.textContent = "\u26A1 Batch mode \u2014 10x faster";
+
+      var batchIndex = 0;
+      var consecutiveGroupFails = 0;
+      var MAX_CONSECUTIVE_FAILS = 3;
+
+      // Helper: download a list of IDs individually, return results
+      async function downloadIndividually(items, tkn) {
+        var results = [];
+        for (var ii = 0; ii < items.length; ii++) {
+          try {
+            var resp = await downloadSingle(items[ii].id, tkn);
+            if (resp.status === 429) {
+              log("Rate limited, waiting 30s\u2026", "error");
+              await new Promise(function(r) { setTimeout(r, 30000); });
+              ii--; continue;
+            }
+            if (resp.status !== 200) {
+              results.push({error: "HTTP " + resp.status, item: items[ii]});
+              continue;
+            }
+            var det = await resp.json();
+            results.push({detail: det, item: items[ii]});
+          } catch (e) {
+            results.push({error: e.message, item: items[ii]});
+          }
+          await new Promise(function(r) { setTimeout(r, 500); });
+        }
+        return results;
+      }
+
+      // Helper: try a batch, return {ok, data, status}
+      async function tryBatch(ids, tkn) {
+        try {
+          var resp = await downloadBatch(ids, tkn);
+          if (resp.status === 200) {
+            var d = await resp.json();
+            return {ok: true, data: d, status: 200};
+          }
+          return {ok: false, data: null, status: resp.status};
+        } catch (e) {
+          return {ok: false, data: null, status: 0, error: e.message};
+        }
+      }
+
+      while (batchIndex < regularConvos.length && useBatch) {
+        var batchItems = regularConvos.slice(batchIndex, batchIndex + BATCH_SIZE);
+        var batchIds = [];
+        for (var bi = 0; bi < batchItems.length; bi++) batchIds.push(batchItems[bi].id);
+
+        // --- Attempt 1: full batch ---
+        var result = await tryBatch(batchIds, token);
+
+        if (result.status === 429) {
+          log("Rate limited, waiting 30s\u2026", "error");
+          var dlTitle = document.getElementById("g2c-dl-title");
+          var dlRemaining = document.getElementById("g2c-dl-remaining");
+          if (dlTitle) dlTitle.textContent = "Rate limited \u2014 waiting 30s\u2026";
+          if (dlRemaining) dlRemaining.textContent = "Will resume automatically";
+          await new Promise(function(r) { setTimeout(r, 30000); });
+          continue; // retry same batch
+        }
+
+        if (result.status === 422 || result.status === 405 || result.status === 404) {
+          log("Batch endpoint unavailable (HTTP " + result.status + "), falling back to individual downloads\u2026", "error");
+          useBatch = false;
+          break;
+        }
+
+        if (result.ok) {
+          // Success — process batch
+          consecutiveGroupFails = 0;
+          var batchData = result.data;
+          var batchArr = Array.isArray(batchData) ? batchData : Object.values(batchData);
+
+          for (var bj = 0; bj < batchArr.length; bj++) {
+            try {
+              var detail = batchArr[bj];
+              var detailId = detail.conversation_id || detail.id;
+              var listItem = listLookup[detailId] || batchItems[bj];
+              var processed = processConversationDetail(detail, listItem);
+              fullExport.conversations.push(processed);
+              successCount++;
+            } catch (procErr) {
+              var errTitle = (batchItems[bj] && batchItems[bj].title) || "Unknown";
+              log("Error processing: " + errTitle + " \u2014 " + procErr.message, "error");
+              errorCount++;
+              fullExport.conversations.push({
+                id: batchIds[bj],
+                title: errTitle,
+                error: procErr.message
+              });
+            }
+          }
+
+          batchIndex += BATCH_SIZE;
+          await new Promise(function(r) { setTimeout(r, 500); });
+
+        } else {
+          // --- Batch failed (likely 500) — graduated retry ---
+          log("Batch error (HTTP " + (result.status || result.error) + "), retrying in 3s\u2026", "error");
+          if (dlMode) dlMode.textContent = "\u26A1 Retrying batch\u2026";
+          await new Promise(function(r) { setTimeout(r, 3000); });
+
+          // --- Attempt 2: retry same batch ---
+          var retry = await tryBatch(batchIds, token);
+
+          if (retry.ok) {
+            consecutiveGroupFails = 0;
+            var retryArr = Array.isArray(retry.data) ? retry.data : Object.values(retry.data);
+            for (var rj = 0; rj < retryArr.length; rj++) {
+              try {
+                var det = retryArr[rj];
+                var detId = det.conversation_id || det.id;
+                var li = listLookup[detId] || batchItems[rj];
+                fullExport.conversations.push(processConversationDetail(det, li));
+                successCount++;
+              } catch (e) {
+                errorCount++;
+                fullExport.conversations.push({id: batchIds[rj], title: (batchItems[rj] && batchItems[rj].title) || "Unknown", error: e.message});
+              }
+            }
+            batchIndex += BATCH_SIZE;
+            await new Promise(function(r) { setTimeout(r, 500); });
+
+          } else if (batchIds.length > 1) {
+            // --- Attempt 3: split batch in half ---
+            log("Retry failed, splitting batch\u2026", "error");
+            if (dlMode) dlMode.textContent = "\u26A1 Splitting batch\u2026";
+            var mid = Math.ceil(batchIds.length / 2);
+            var halfA = batchIds.slice(0, mid);
+            var halfB = batchIds.slice(mid);
+            var itemsA = batchItems.slice(0, mid);
+            var itemsB = batchItems.slice(mid);
+
+            var anyHalfFailed = false;
+            var halves = [{ids: halfA, items: itemsA}, {ids: halfB, items: itemsB}];
+
+            for (var hi = 0; hi < halves.length; hi++) {
+              var halfResult = await tryBatch(halves[hi].ids, token);
+              if (halfResult.ok) {
+                var halfArr = Array.isArray(halfResult.data) ? halfResult.data : Object.values(halfResult.data);
+                for (var hj = 0; hj < halfArr.length; hj++) {
+                  try {
+                    var hDet = halfArr[hj];
+                    var hId = hDet.conversation_id || hDet.id;
+                    var hLi = listLookup[hId] || halves[hi].items[hj];
+                    fullExport.conversations.push(processConversationDetail(hDet, hLi));
+                    successCount++;
+                  } catch (e) {
+                    errorCount++;
+                    fullExport.conversations.push({id: halves[hi].ids[hj], title: (halves[hi].items[hj] && halves[hi].items[hj].title) || "Unknown", error: e.message});
+                  }
+                }
+              } else {
+                // Half batch also failed — download individually
+                anyHalfFailed = true;
+                log("Half-batch failed, downloading " + halves[hi].ids.length + " individually\u2026", "error");
+                var indResults = await downloadIndividually(halves[hi].items, token);
+                for (var ir = 0; ir < indResults.length; ir++) {
+                  if (indResults[ir].detail) {
+                    try {
+                      fullExport.conversations.push(processConversationDetail(indResults[ir].detail, indResults[ir].item));
+                      successCount++;
+                    } catch (e) {
+                      errorCount++;
+                      fullExport.conversations.push({id: indResults[ir].item.id, title: indResults[ir].item.title || "Unknown", error: e.message});
+                    }
+                  } else {
+                    errorCount++;
+                    fullExport.conversations.push({id: indResults[ir].item.id, title: indResults[ir].item.title || "Unknown", error: indResults[ir].error});
+                  }
+                }
+              }
+              await new Promise(function(r) { setTimeout(r, 500); });
+            }
+
+            if (anyHalfFailed) {
+              consecutiveGroupFails++;
+              log("Batch group recovered individually, resuming batch mode (" + consecutiveGroupFails + "/" + MAX_CONSECUTIVE_FAILS + " fails)", "error");
+            } else {
+              consecutiveGroupFails = 0;
+            }
+
+            batchIndex += BATCH_SIZE;
+
+          } else {
+            // Single item batch failed — download individually
+            var singleResults = await downloadIndividually(batchItems, token);
+            for (var sr = 0; sr < singleResults.length; sr++) {
+              if (singleResults[sr].detail) {
+                try {
+                  fullExport.conversations.push(processConversationDetail(singleResults[sr].detail, singleResults[sr].item));
+                  successCount++;
+                } catch (e) {
+                  errorCount++;
+                  fullExport.conversations.push({id: singleResults[sr].item.id, title: singleResults[sr].item.title || "Unknown", error: e.message});
+                }
+              } else {
+                errorCount++;
+                fullExport.conversations.push({id: singleResults[sr].item.id, title: singleResults[sr].item.title || "Unknown", error: singleResults[sr].error});
+              }
+            }
+            consecutiveGroupFails++;
+            batchIndex += BATCH_SIZE;
+          }
+
+          // Check if we should permanently give up on batch mode
+          if (consecutiveGroupFails >= MAX_CONSECUTIVE_FAILS) {
+            log("Too many consecutive batch failures (" + MAX_CONSECUTIVE_FAILS + "), switching to individual mode", "error");
+            useBatch = false;
+          } else if (consecutiveGroupFails > 0) {
+            if (dlMode) dlMode.textContent = "\u26A1 Batch mode \u2014 resumed";
+          }
+        }
+
+        // Update UI after each group
+        var completed = successCount + errorCount;
+        var lastTitle = batchItems[batchItems.length - 1].title || "Untitled";
+        updateDlUI(completed, filtered.length, lastTitle, startTime);
+
+        if (completed % 100 === 0 || completed === filtered.length) {
+          log("Progress: " + completed + "/" + filtered.length);
+        }
+      }
+
+      // ---- FALLBACK: INDIVIDUAL DOWNLOADS ----
+      if (!useBatch) {
+        if (dlMode) dlMode.textContent = "\uD83D\uDC22 Individual mode";
+        log("Switching to individual downloads\u2026");
+
+        // Start from where batch left off
+        var startFrom = successCount + errorCount;
+        for (var i = startFrom; i < regularConvos.length; i++) {
+          var c = regularConvos[i];
+          var title = c.title || "Untitled";
+
+          updateDlUI(i + 1, filtered.length, title, startTime);
+
+          try {
+            var convoResp = await downloadSingle(c.id, token);
+
+            if (convoResp.status === 429) {
+              log("Rate limited, waiting 30s\u2026", "error");
+              var dlTitle = document.getElementById("g2c-dl-title");
+              var dlRemaining = document.getElementById("g2c-dl-remaining");
+              if (dlTitle) dlTitle.textContent = "Rate limited \u2014 waiting 30s\u2026";
+              if (dlRemaining) dlRemaining.textContent = "Will resume automatically";
+              await new Promise(function(r) { setTimeout(r, 30000); });
+              i--;
+              continue;
+            }
+
+            if (convoResp.status !== 200) {
+              log("Skipped: " + title + " (HTTP " + convoResp.status + ")", "error");
+              errorCount++;
+              fullExport.conversations.push({id: c.id, title: title, error: "HTTP " + convoResp.status});
+              continue;
+            }
+
+            var detail = await convoResp.json();
+            var processed = processConversationDetail(detail, c);
+            fullExport.conversations.push(processed);
+            successCount++;
+
+            if (i % 25 === 0 && i > 0) {
+              log("Progress: " + (i + 1) + "/" + filtered.length);
+            }
+
+          } catch (err) {
+            log("Error: " + title + " \u2014 " + err.message, "error");
+            errorCount++;
+            fullExport.conversations.push({id: c.id, title: title, error: err.message});
+          }
+
+          await new Promise(function(r) { setTimeout(r, 1000); });
+        }
+      }
+      } // end if (regularConvos.length > 0)
+
+      // ---- TRUNCATION DETECTION & RECOVERY ----
+      // Batch endpoint intermittently returns incomplete mapping trees.
+      // Detect suspected truncation and re-fetch via single endpoint.
+      var truncationSuspects = [];
+      for (var ti = 0; ti < fullExport.conversations.length; ti++) {
+        var conv = fullExport.conversations[ti];
+        if (conv.error) continue; // skip failed downloads
+        if (!conv._mapping_node_count) continue; // no mapping data to judge
+
+        var ageSeconds = 0;
+        if (conv.create_time && conv.update_time) {
+          ageSeconds = conv.update_time - conv.create_time;
+        }
+        var ageDays = ageSeconds / 86400;
+
+        // Heuristic: flag conversations with suspiciously few nodes for their lifespan
+        var suspect = false;
+        if (conv.message_count === 0 && conv._mapping_node_count > 0) {
+          suspect = true; // has nodes but zero extractable messages
+        } else if (ageDays > 30 && conv._mapping_node_count < 40) {
+          suspect = true; // month+ conversation with very small tree
+        } else if (ageDays > 7 && conv._mapping_node_count < 20) {
+          suspect = true; // week+ conversation with tiny tree
+        } else if (ageDays > 1 && conv.message_count < 4) {
+          suspect = true; // multi-day conversation with almost no messages
+        }
+
+        if (suspect) {
+          truncationSuspects.push({index: ti, conv: conv});
+        }
+      }
+
+      if (truncationSuspects.length > 0) {
+        log("Truncation check: " + truncationSuspects.length + " conversation(s) flagged, re-fetching\u2026");
+        var dlMode = document.getElementById("g2c-dl-mode");
+        if (dlMode) dlMode.textContent = "\uD83D\uDD0D Verifying truncated conversations\u2026";
+
+        var recovered = 0;
+        var verified = 0;
+        for (var ts = 0; ts < truncationSuspects.length; ts++) {
+          var sus = truncationSuspects[ts];
+          try {
+            var singleResp = await downloadSingle(sus.conv.id, token);
+            if (singleResp.status === 429) {
+              log("Rate limited during truncation check, waiting 30s\u2026", "error");
+              await new Promise(function(r) { setTimeout(r, 30000); });
+              ts--; continue;
+            }
+            if (singleResp.status !== 200) continue;
+
+            var singleDetail = await singleResp.json();
+            var singleNodeCount = singleDetail.mapping ? Object.keys(singleDetail.mapping).length : 0;
+
+            if (singleNodeCount > sus.conv._mapping_node_count) {
+              // Single endpoint returned more data — use it
+              var listItem = listLookup[sus.conv.id] || null;
+              var reprocessed = processConversationDetail(singleDetail, listItem);
+              // Preserve metadata from original
+              reprocessed.project = sus.conv.project;
+              reprocessed.project_id = sus.conv.project_id;
+              reprocessed.archived = sus.conv.archived;
+              reprocessed._truncation_recovered = true;
+              reprocessed._batch_node_count = sus.conv._mapping_node_count;
+              reprocessed._batch_message_count = sus.conv.message_count;
+
+              fullExport.conversations[sus.index] = reprocessed;
+              recovered++;
+              log("Recovered: " + sus.conv.title + " (" + sus.conv.message_count + " \u2192 " + reprocessed.message_count + " messages)");
+            } else {
+              verified++;
+            }
+          } catch (e) {
+            log("Re-fetch failed: " + sus.conv.title + " \u2014 " + e.message, "error");
+          }
+          await new Promise(function(r) { setTimeout(r, 500); });
+        }
+
+        if (recovered > 0) {
+          log("Truncation recovery: " + recovered + " conversation(s) recovered, " + verified + " verified OK");
+        } else {
+          log("Truncation check: all " + truncationSuspects.length + " verified OK");
+        }
+        if (dlMode) dlMode.textContent = "";
+      }
+
+      // ---- DOWNLOAD SHARED CONVERSATIONS ----
+      if (sharedConvos.length > 0) {
+        log("Downloading " + sharedConvos.length + " shared conversation(s)\u2026");
+        var dlMode = document.getElementById("g2c-dl-mode");
+        if (dlMode) dlMode.textContent = "\uD83D\uDD17 Shared conversations";
+
+        for (var si = 0; si < sharedConvos.length; si++) {
+          var sc = sharedConvos[si];
+          var shareId = sc._share_id;
+          var scTitle = sc.title || "Shared conversation";
+
+          var completed = successCount + errorCount;
+          updateDlUI(completed + 1, filtered.length, scTitle, startTime);
+
+          try {
+            var sharedResp = await downloadShared(shareId, token);
+
+            if (sharedResp.status === 429) {
+              log("Rate limited, waiting 30s\u2026", "error");
+              await new Promise(function(r) { setTimeout(r, 30000); });
+              si--; continue;
+            }
+
+            if (sharedResp.status !== 200) {
+              log("Skipped shared: " + scTitle + " (HTTP " + sharedResp.status + ")", "error");
+              errorCount++;
+              fullExport.conversations.push({id: sc.id, title: scTitle, shared: true, error: "HTTP " + sharedResp.status});
+              continue;
+            }
+
+            var sharedDetail = await sharedResp.json();
+            var processed = processConversationDetail(sharedDetail, sc);
+            processed.shared = true;
+            processed.share_id = shareId;
+            fullExport.conversations.push(processed);
+            successCount++;
+
+          } catch (sharedErr) {
+            log("Error shared: " + scTitle + " \u2014 " + sharedErr.message, "error");
+            errorCount++;
+            fullExport.conversations.push({id: sc.id, title: scTitle, shared: true, error: sharedErr.message});
+          }
+
+          await new Promise(function(r) { setTimeout(r, 1000); });
+        }
+      }
+
+      var json = JSON.stringify(fullExport, null, 2);
+      var sizeBytes = json.length;
+      var sizeStr = sizeBytes < 1024 * 1024
+        ? (sizeBytes / 1024).toFixed(0) + " KB"
+        : (sizeBytes / 1024 / 1024).toFixed(1) + " MB";
+
+      // Smart filename based on what was exported
+      var exportFilename = "chatgpt_all_conversations.json";
+      var projectNames = {};
+      var hasMain = false;
+      var hasShared = false;
+      var hasArchived = false;
+      for (var fi = 0; fi < fullExport.conversations.length; fi++) {
+        if (fullExport.conversations[fi].shared) {
+          hasShared = true;
+        } else if (fullExport.conversations[fi].archived) {
+          hasArchived = true;
+        } else if (fullExport.conversations[fi].project) {
+          projectNames[fullExport.conversations[fi].project] = true;
+        } else {
+          hasMain = true;
+        }
+      }
+      var projNameList = Object.keys(projectNames);
+      if (!hasMain && !hasShared && !hasArchived && projNameList.length === 1) {
+        // Only one project exported
+        exportFilename = "chatgpt_project_" + projNameList[0].toLowerCase().replace(/[^a-z0-9]+/g, "_") + ".json";
+      } else if (!hasMain && !hasShared && !hasArchived && projNameList.length > 1) {
+        exportFilename = "chatgpt_projects.json";
+      } else if (!hasMain && hasShared && !hasArchived && projNameList.length === 0) {
+        exportFilename = "chatgpt_shared_conversations.json";
+      } else if (!hasMain && !hasShared && hasArchived && projNameList.length === 0) {
+        exportFilename = "chatgpt_archived_conversations.json";
+      }
+      downloadFile(json, exportFilename, "application/json");
+
+      // Count truncation recoveries
+      var recoveredCount = 0;
+      for (var rc = 0; rc < fullExport.conversations.length; rc++) {
+        if (fullExport.conversations[rc]._truncation_recovered) recoveredCount++;
+      }
+
+      var doneMsg = "DONE! " + successCount + " conversations, " + errorCount + " errors, ~" + sizeStr;
+      if (recoveredCount > 0) doneMsg += " (" + recoveredCount + " recovered from truncation)";
+      log(doneMsg, "success");
+
+      // Collect model breakdown from export
+      var modelBreakdown = {};
+      for (var mi = 0; mi < fullExport.conversations.length; mi++) {
+        var cm = fullExport.conversations[mi].model || "unknown";
+        modelBreakdown[cm] = (modelBreakdown[cm] || 0) + 1;
+      }
+      var sortedModels = Object.keys(modelBreakdown).sort(function(a, b) {
+        return modelBreakdown[b] - modelBreakdown[a];
+      });
+
+      // Build model tags HTML — top 5 visible, rest collapsed
+      var TOP_N = 5;
+      var modelTagsHtml = '<div class="g2c-complete-models-wrap">';
+      for (var ti = 0; ti < Math.min(TOP_N, sortedModels.length); ti++) {
+        var mk = sortedModels[ti];
+        modelTagsHtml += '<span class="g2c-scan-tag">' + mk + ' <span style="opacity:0.6;">' + modelBreakdown[mk] + '</span></span>';
+      }
+      if (sortedModels.length > TOP_N) {
+        var moreCount = sortedModels.length - TOP_N;
+        modelTagsHtml += '<button class="g2c-models-toggle" id="g2c-models-toggle">+' + moreCount + ' more</button>';
+        modelTagsHtml += '<div class="g2c-models-extra" id="g2c-models-extra" style="display:none;">';
+        for (var ti = TOP_N; ti < sortedModels.length; ti++) {
+          var mk = sortedModels[ti];
+          modelTagsHtml += '<span class="g2c-scan-tag">' + mk + ' <span style="opacity:0.6;">' + modelBreakdown[mk] + '</span></span>';
+        }
+        modelTagsHtml += '</div>';
+      }
+      modelTagsHtml += '</div>';
+
+      // Show completion screen (State 5)
+      var filterPanel = document.getElementById("g2c-filter-panel");
+      if (filterPanel) {
+        var elapsed = Math.round((Date.now() - startTime) / 1000);
+        var elapsedStr = elapsed < 60 ? elapsed + "s" : Math.round(elapsed / 60) + "m " + (elapsed % 60) + "s";
+
+        filterPanel.innerHTML = '\
+          <div class="g2c-complete">\
+            <div class="g2c-complete-icon">\u2705</div>\
+            <div class="g2c-complete-title">Export Complete!</div>\
+            <div class="g2c-complete-sub">' + successCount + ' conversations \u00B7 ' + sizeStr + ' \u00B7 ' + elapsedStr + '</div>\
+            ' + (recoveredCount > 0 ? '<div class="g2c-complete-sub" style="color:#a0e0a0;">\uD83D\uDD0D ' + recoveredCount + ' conversation(s) recovered from batch truncation</div>' : '') + '\
+            ' + modelTagsHtml + '\
+          </div>\
+          <div class="g2c-whatsnext">\
+            <div class="g2c-whatsnext-title">What\u2019s next?</div>\
+            <div class="g2c-whatsnext-item">\
+              <span style="color:#a0a0e0;">\uD83D\uDC40 Browse your data</span><br>\
+              <span style="color:#999;">Open the <a href="https://siamsnus.github.io/GPT2Claude-Migration-Kit/viewer.html" target="_blank">Conversation Viewer</a> to explore your chats. You can <a href="https://siamsnus.github.io/GPT2Claude-Migration-Kit/viewer.html" download target="_blank">download it</a> for fully offline use.</span>\
+            </div>\
+            <div class="g2c-whatsnext-item">\
+              <span style="color:#7eb8a0;">\uD83D\uDE80 Import to Claude</span> <span class="g2c-whatsnext-badge">recommended</span><br>\
+              <span style="color:#999;">Follow the <a href="https://siamsnus.github.io/GPT2Claude-Migration-Kit/#importing" target="_blank">import guide</a> to bring your history into Claude.</span>\
+            </div>\
+          </div>';
+
+        // Wire up "show more models" toggle
+        var modelsToggle = document.getElementById("g2c-models-toggle");
+        if (modelsToggle) {
+          modelsToggle.addEventListener("click", function() {
+            var extra = document.getElementById("g2c-models-extra");
+            if (extra) {
+              var showing = extra.style.display !== "none";
+              extra.style.display = showing ? "none" : "flex";
+              this.textContent = showing ? "+" + (sortedModels.length - TOP_N) + " more" : "show less";
+            }
+          });
+        }
+      }
+
+    } catch (err) {
+      log("Download failed: " + err.message, "error");
+      var dlTitle = document.getElementById("g2c-dl-title");
+      if (dlTitle) dlTitle.textContent = "Error: " + err.message;
+    }
+  }
+
+  // ========== EXPORT: INSTRUCTIONS ==========
+  async function exportInstructions() {
+    var btn = document.getElementById("g2c-btn-instructions");
+    setButtonState(btn, "running", "Exporting...");
+
+    try {
+      var token = await getToken();
+      var headers = {"Authorization": "Bearer " + token};
+
+      var endpoints = [
+        {name: "custom_instructions", url: "https://chatgpt.com/backend-api/user_system_messages"},
+        {name: "settings", url: "https://chatgpt.com/backend-api/settings"},
+        {name: "beta_features", url: "https://chatgpt.com/backend-api/settings/beta_features"},
+        {name: "models", url: "https://chatgpt.com/backend-api/models"},
+        {name: "account", url: "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27"},
+        {name: "codex_usage", url: "https://chatgpt.com/backend-api/codex/usage"},
+        {name: "compliance", url: "https://chatgpt.com/backend-api/compliance"}
+      ];
+
+      var result = {
+        export_date: new Date().toISOString(),
+        tool: "GPT2Claude Migration Kit v2.7",
+        data: {}
+      };
+
+      for (var i = 0; i < endpoints.length; i++) {
+        var ep = endpoints[i];
+        log("Fetching " + ep.name + "...");
+        try {
+          var resp = await fetch(ep.url, {credentials: "include", headers: headers});
+          if (resp.status === 200) {
+            result.data[ep.name] = await resp.json();
+            log("Got: " + ep.name);
+          } else if (resp.status === 404) {
+            result.data[ep.name] = {note: "Not available on this account"};
+            log(ep.name + ": not available (skipped)");
+          } else {
+            result.data[ep.name] = {error: "HTTP " + resp.status};
+            log(ep.name + ": HTTP " + resp.status, "error");
+          }
+        } catch (e) {
+          result.data[ep.name] = {error: e.message};
+          log(ep.name + " error: " + e.message, "error");
+        }
+      }
+
+      downloadFile(JSON.stringify(result, null, 2), "chatgpt_instructions.json", "application/json");
+      setButtonState(btn, "done", "Instructions exported");
+
+    } catch (err) {
+      log("Instructions export failed: " + err.message, "error");
+      setButtonState(btn, "error", err.message);
+    }
+  }
+
+  // ========== EVENT LISTENERS ==========
+  document.getElementById("g2c-close").addEventListener("click", function() {
+    panel.style.animation = "g2c-fadein 0.2s ease-out reverse";
+    setTimeout(function() { panel.remove(); style.remove(); }, 200);
+  });
+
+  document.getElementById("g2c-btn-memory").addEventListener("click", exportMemories);
+  document.getElementById("g2c-btn-convos").addEventListener("click", exportConversations);
+  document.getElementById("g2c-btn-instructions").addEventListener("click", exportInstructions);
+
+  document.getElementById("g2c-btn-all").addEventListener("click", async function() {
+    var btn = document.getElementById("g2c-btn-all");
+    setButtonState(btn, "running", "Exporting everything...");
+    log("--- EXPORT ALL started ---");
+    await exportMemories();
+    await exportInstructions();
+    log("Memories & instructions done. Scanning conversations...");
+    await exportConversations();
+    log("Memories & instructions exported. Configure conversation filters and click Download.", "success");
+  });
+
+  document.getElementById("g2c-toggle-log").addEventListener("click", function() {
+    var logVisible = logEl.classList.contains("visible");
+    logEl.classList.toggle("visible");
+    this.textContent = logVisible ? "Show log \u25BC" : "Hide log \u25B2";
+  });
+
+  // Copy log button
+  document.getElementById("g2c-copy-log").addEventListener("click", function() {
+    var copyBtn = this;
+    var entries = document.querySelectorAll(".g2c-log-entry");
+    var text = "";
+    for (var i = 0; i < entries.length; i++) {
+      text += entries[i].textContent + "\n";
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        copyBtn.textContent = "\u2705 Copied!";
+        setTimeout(function() { copyBtn.textContent = "Copy log"; }, 2000);
+      }).catch(function() {
+        fallbackCopy(text, copyBtn);
+      });
+    } else {
+      fallbackCopy(text, copyBtn);
+    }
+  });
+
+  function fallbackCopy(text, btn) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      btn.textContent = "\u2705 Copied!";
+      setTimeout(function() { btn.textContent = "Copy log"; }, 2000);
+    } catch (e) {
+      btn.textContent = "Copy failed";
+      setTimeout(function() { btn.textContent = "Copy log"; }, 2000);
+    }
+    document.body.removeChild(ta);
+  }
+
+  log("Ready. Click a button to start exporting.");
+
+  // ========== CAMERA TOGGLE ==========
+  var cameraState = null; // null=unknown, true=on, false=off
+  async function toggleCamera() {
+    var btn = document.getElementById("g2c-camera-btn");
+    var note = document.getElementById("g2c-camera-note");
+    if (!btn) return;
+
+    btn.className = "g2c-tool-toggle checking";
+    btn.textContent = "\u2026";
+
+    try {
+      var token = await getToken();
+      var headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"};
+
+      // If we don't know current state, check first
+      if (cameraState === null) {
+        var checkResp = await fetch("https://chatgpt.com/backend-api/settings/beta_features", {
+          credentials: "include", headers: headers
+        });
+        if (checkResp.status === 200) {
+          var features = await checkResp.json();
+          cameraState = !!(features.video_screen_sharing);
+          log("Camera currently: " + (cameraState ? "ON" : "OFF"));
+        } else {
+          cameraState = false;
+          log("Beta features: HTTP " + checkResp.status + " (assuming off)");
+        }
+      }
+
+      // Toggle to opposite state
+      var newState = !cameraState;
+      var toggleResp = await fetch(
+        "https://chatgpt.com/backend-api/settings/beta_features?feature=video_screen_sharing&value=" + newState,
+        {method: "POST", credentials: "include", headers: headers}
+      );
+
+      if (toggleResp.status === 200) {
+        cameraState = newState;
+        btn.className = "g2c-tool-toggle" + (newState ? " on" : "");
+        btn.textContent = newState ? "ON" : "OFF";
+        log("Camera " + (newState ? "enabled" : "disabled"), "success");
+
+        if (note) {
+          note.style.display = "block";
+          note.textContent = newState
+            ? "\u2705 Enabled! Refresh the page (F5) to see the camera icon"
+            : "Disabled. Refresh the page to remove the camera icon";
+          setTimeout(function() {
+            if (note) note.style.display = "none";
+          }, 8000);
+        }
+      } else {
+        throw new Error("HTTP " + toggleResp.status);
+      }
+    } catch (err) {
+      btn.className = "g2c-tool-toggle";
+      btn.textContent = "Error";
+      log("Camera toggle failed: " + err.message, "error");
+      setTimeout(function() {
+        if (btn) btn.textContent = "Retry";
+      }, 2000);
+    }
+  }
+
+  // Auto-check camera state on load
+  (async function() {
+    try {
+      var btn = document.getElementById("g2c-camera-btn");
+      if (!btn) return;
+      var token = await getToken();
+      var headers = {"Authorization": "Bearer " + token};
+      var resp = await fetch("https://chatgpt.com/backend-api/settings/beta_features", {
+        credentials: "include", headers: headers
+      });
+      if (resp.status === 200) {
+        var features = await resp.json();
+        cameraState = !!(features.video_screen_sharing);
+        btn.className = "g2c-tool-toggle" + (cameraState ? " on" : "");
+        btn.textContent = cameraState ? "ON" : "OFF";
+      }
+    } catch (e) {
+      // silent — user can click to check manually
+    }
+  })();
+
+  safeAddEvent("g2c-camera-btn", "click", toggleCamera);
+})();
+</script>
+
+<script>
+// Browser detection
+(function() {
+  var detect = document.getElementById("browser-detect");
+  var isFirefox = navigator.userAgent.indexOf("Firefox") > -1;
+  var isChrome = navigator.userAgent.indexOf("Chrome") > -1 && navigator.userAgent.indexOf("Edg") === -1;
+  var isEdge = navigator.userAgent.indexOf("Edg") > -1;
+  var isBrave = navigator.brave !== undefined;
+
+  if (isFirefox) {
+    detect.textContent = "🦊 Firefox detected — use console paste below";
+    showTab("firefox");
+  } else if (isBrave) {
+    detect.textContent = "🦁 Brave detected — drag the button below";
+    showTab("chrome");
+  } else if (isEdge) {
+    detect.textContent = "🌐 Edge detected — drag the button below";
+    showTab("chrome");
+  } else if (isChrome) {
+    detect.textContent = "✨ Chrome detected — drag the button below";
+    showTab("chrome");
+  }
+})();
+
+// Tab switching
+function showTab(name) {
+  var tabs = document.querySelectorAll(".tab-content");
+  var btns = document.querySelectorAll(".tab-btn");
+  for (var i = 0; i < tabs.length; i++) { tabs[i].classList.remove("active"); }
+  for (var i = 0; i < btns.length; i++) { btns[i].classList.remove("active"); }
+  document.getElementById("tab-" + name).classList.add("active");
+  var labels = {"chrome": 0, "firefox": 1, "paste": 2};
+  if (labels[name] !== undefined) btns[labels[name]].classList.add("active");
+}
+
+// Copy bookmark URL (for Firefox)
+var copyUrlBtn = document.getElementById("copy-bookmark-url");
+if (copyUrlBtn) {
+  copyUrlBtn.addEventListener("click", function() {
+    var href = document.getElementById("bookmarklet-btn").getAttribute("href");
+    navigator.clipboard.writeText(href).then(function() {
+      document.getElementById("copy-url-confirm").style.display = "block";
+      copyUrlBtn.innerHTML = "✅ Copied!";
+      setTimeout(function() {
+        copyUrlBtn.innerHTML = "📋 Copy bookmark URL";
+        document.getElementById("copy-url-confirm").style.display = "none";
+      }, 4000);
+    });
+  });
+}
+
+// Copy full script (for console paste)
+var copyScriptBtn = document.getElementById("copy-full-script");
+if (copyScriptBtn) {
+  copyScriptBtn.addEventListener("click", function() {
+    var code = document.getElementById("migrate-source").textContent.trim();
+    navigator.clipboard.writeText(code).then(function() {
+      document.getElementById("copy-script-confirm").style.display = "block";
+      copyScriptBtn.innerHTML = "✅ Copied!";
+      setTimeout(function() {
+        copyScriptBtn.innerHTML = "📋 Copy export script";
+        document.getElementById("copy-script-confirm").style.display = "none";
+      }, 4000);
+    });
+  });
+}
+
+// Copy full script (for Firefox console paste)
+var copyFirefoxBtn = document.getElementById("copy-firefox-script");
+if (copyFirefoxBtn) {
+  copyFirefoxBtn.addEventListener("click", function() {
+    var code = document.getElementById("migrate-source").textContent.trim();
+    navigator.clipboard.writeText(code).then(function() {
+      document.getElementById("copy-firefox-confirm").style.display = "block";
+      copyFirefoxBtn.innerHTML = "✅ Copied!";
+      setTimeout(function() {
+        copyFirefoxBtn.innerHTML = "📋 Copy export script";
+        document.getElementById("copy-firefox-confirm").style.display = "none";
+      }, 4000);
+    });
+  });
+}
+</script>
+</body>
+</html>
+</file>
+
+<file path="LICENSE">
+MIT License
+
+Copyright (c) 2026 Siamsnus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</file>
+
+<file path="migrate.js">
+// GPT2Claude Migration Kit v2.7
+// https://github.com/Siamsnus/GPT2Claude-Migration-Kit
+// Exports ChatGPT memories, conversations, and instructions
+// No data leaves your browser - everything runs locally
+
+(function() {
+  // Prevent double-loading
+  if (document.getElementById("gpt2claude-panel")) {
+    var existing = document.getElementById("gpt2claude-panel");
+    existing.style.animation = "g2c-shake 0.3s ease-in-out";
+    setTimeout(function() { existing.style.animation = ""; }, 300);
+    return;
+  }
+
+  // ========== STYLES ==========
+  var style = document.createElement("style");
+  style.textContent = "\
+    @keyframes g2c-fadein { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }\
+    @keyframes g2c-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }\
+    @keyframes g2c-spin { to { transform: rotate(360deg); } }\
+    @keyframes g2c-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }\
+    @keyframes g2c-indeterminate { 0% { left: -30%; width: 30%; } 50% { left: 50%; width: 30%; } 100% { left: 100%; width: 30%; } }\
+    @keyframes g2c-pulse-count { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }\
+    @keyframes g2c-dot-bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }\
+    .g2c-progress-fill.indeterminate { position: relative; width: 100% !important; background: none !important; overflow: hidden; }\
+    .g2c-progress-fill.indeterminate::after { content: ''; position: absolute; top: 0; left: -30%; width: 30%; height: 100%; background: linear-gradient(90deg, transparent, #d4a574, transparent); border-radius: 3px; animation: g2c-indeterminate 1.5s ease-in-out infinite; }\
+    .g2c-scan-hero { text-align: center; padding: 20px 0 10px; }\
+    .g2c-scan-hero .g2c-scan-count { font-size: 42px; font-weight: 800; color: #d4a574; font-variant-numeric: tabular-nums; animation: g2c-pulse-count 2s ease-in-out infinite; line-height: 1; }\
+    .g2c-scan-hero .g2c-scan-label { font-size: 12px; color: #888; margin-top: 4px; }\
+    .g2c-scan-hero .g2c-scan-status { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 12px; font-size: 12px; color: #999; }\
+    .g2c-scan-dots { display: flex; gap: 3px; }\
+    .g2c-scan-dots span { width: 4px; height: 4px; background: #d4a574; border-radius: 50%; animation: g2c-dot-bounce 1.2s ease-in-out infinite; }\
+    .g2c-scan-dots span:nth-child(2) { animation-delay: 0.15s; }\
+    .g2c-scan-dots span:nth-child(3) { animation-delay: 0.3s; }\
+    .g2c-scan-models { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 14px; padding-top: 14px; border-top: 1px solid #2a2a35; }\
+    .g2c-scan-tag { font-size: 10px; padding: 3px 10px; background: #1e1e26; border: 1px solid #2a2a35; border-radius: 20px; color: #a0a0e0; font-family: 'SF Mono', Consolas, monospace; }\
+    .g2c-scan-reassure { font-size: 11px; color: #555; text-align: center; margin-top: 12px; }\
+    .g2c-dl-hero { text-align: center; padding: 16px 0 8px; }\
+    .g2c-dl-hero .g2c-dl-count { font-size: 28px; font-weight: 700; color: #7eb8a0; }\
+    .g2c-dl-hero .g2c-dl-of { font-size: 14px; color: #555; }\
+    .g2c-dl-hero .g2c-dl-title { font-size: 11px; color: #888; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }\
+    .g2c-dl-pct { font-size: 11px; color: #d4a574; font-family: 'SF Mono', Consolas, monospace; text-align: right; margin-top: 6px; }\
+    .g2c-dl-remaining { font-size: 11px; color: #666; text-align: center; margin-top: 8px; }\
+    .g2c-complete { text-align: center; padding: 20px 0 10px; }\
+    .g2c-complete-icon { font-size: 36px; margin-bottom: 6px; }\
+    .g2c-complete-title { font-size: 18px; font-weight: 700; color: #7eb8a0; }\
+    .g2c-complete-sub { font-size: 12px; color: #888; margin-top: 6px; }\
+    .g2c-complete-models { font-size: 11px; color: #d4a574; margin-top: 6px; font-family: 'SF Mono', Consolas, monospace; }\
+.g2c-complete-models-wrap { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 12px; }\
+.g2c-models-extra { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; width: 100%; margin-top: 4px; }\
+.g2c-models-toggle { font-size: 10px; padding: 3px 10px; background: none; border: 1px dashed #333340; border-radius: 20px; color: #888; cursor: pointer; font-family: 'SF Mono', Consolas, monospace; }\
+.g2c-models-toggle:hover { border-color: #d4a574; color: #d4a574; }\
+    .g2c-whatsnext { margin: 16px 0; padding: 14px; background: #141418; border: 1px solid #252530; border-radius: 10px; }\
+    .g2c-whatsnext-title { font-size: 11px; color: #888; margin-bottom: 10px; font-weight: 600; }\
+    .g2c-whatsnext-item { font-size: 12px; color: #ccc; line-height: 1.8; margin-bottom: 10px; }\
+    .g2c-whatsnext-item:last-child { margin-bottom: 0; }\
+    .g2c-whatsnext-item a { color: #d4a574; text-decoration: none; }\
+    .g2c-whatsnext-item a:hover { text-decoration: underline; }\
+    .g2c-whatsnext-badge { font-size: 10px; color: #7eb8a0; background: rgba(126,184,160,0.12); padding: 1px 6px; border-radius: 4px; }\
+    .g2c-copy-log { background: none; border: none; color: #666; font-size: 11px; cursor: pointer; padding: 6px 0; margin-top: 10px; margin-left: 12px; }\
+    .g2c-copy-log:hover { color: #aaa; }\
+    #gpt2claude-panel { position: fixed; top: 50%; right: 24px; transform: translateY(-50%); width: 360px; background: #1a1a1f; border: 1px solid #333340; border-radius: 16px; box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06); z-index: 999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e8e8ec; animation: g2c-fadein 0.3s ease-out; }\
+    #gpt2claude-panel * { box-sizing: border-box; margin: 0; padding: 0; }\
+    .g2c-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 14px; border-bottom: 1px solid #2a2a35; background: #1e1e24; border-radius: 16px 16px 0 0; }\
+    .g2c-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }\
+    .g2c-title span.gpt { color: #a0a0e0; }\
+    .g2c-title span.arrow { color: #555; margin: 0 4px; }\
+    .g2c-title span.claude { color: #d4a574; }\
+    .g2c-version { font-size: 10px; color: #666; font-weight: 600; margin-top: 2px; }\
+    .g2c-close { background: none; border: none; color: #777; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px; line-height: 1; }\
+    .g2c-close:hover { background: #252530; color: #e8e8ec; }\
+    .g2c-body { padding: 18px 22px 14px; }\
+    .g2c-btn { width: 100%; padding: 14px 16px; border: 1px solid #333340; border-radius: 12px; background: #222228; color: #e8e8ec; font-size: 13px; font-weight: 600; cursor: pointer; text-align: left; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; transition: all 0.15s ease; position: relative; overflow: hidden; }\
+    .g2c-btn:hover { background: #2a2a32; border-color: #444450; transform: translateY(-1px); }\
+    .g2c-btn:active { transform: translateY(0); }\
+    .g2c-btn.running { pointer-events: none; border-color: #d4a574; }\
+    .g2c-btn.done { border-color: #7eb8a0; }\
+    .g2c-btn.error { border-color: #e07070; }\
+    .g2c-btn-icon { font-size: 20px; width: 28px; text-align: center; flex-shrink: 0; }\
+    .g2c-btn-text { flex: 1; }\
+    .g2c-btn-sub { font-size: 11px; color: #777; font-weight: 400; margin-top: 3px; }\
+    .g2c-progress { margin-top: 10px; }\
+    .g2c-progress-bar { width: 100%; height: 5px; background: #252530; border-radius: 3px; overflow: hidden; }\
+    .g2c-progress-fill { height: 100%; background: linear-gradient(90deg, #d4a574, #e8c49a); border-radius: 3px; transition: width 0.3s ease; width: 0%; }\
+    .g2c-progress-text { font-size: 11px; color: #999; margin-top: 6px; }\
+    .g2c-log { margin-top: 14px; max-height: 140px; overflow-y: auto; background: #141418; border: 1px solid #252530; border-radius: 10px; padding: 10px 12px; font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; line-height: 1.6; color: #999; display: none; }\
+    .g2c-log.visible { display: block; }\
+    .g2c-log-entry { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1px 0; }\
+    .g2c-log-entry.error { color: #e07070; }\
+    .g2c-log-entry.success { color: #7eb8a0; }\
+    .g2c-footer { padding: 14px 22px; border-top: 1px solid #252530; display: flex; justify-content: space-between; align-items: center; }\
+    .g2c-footer-text { font-size: 10px; color: #555; }\
+    .g2c-footer-link { font-size: 10px; color: #d4a574; text-decoration: none; }\
+    .g2c-footer-link:hover { text-decoration: underline; }\
+    .g2c-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #444; border-top-color: #d4a574; border-radius: 50%; animation: g2c-spin 0.6s linear infinite; }\
+    .g2c-toggle-log { background: none; border: none; color: #666; font-size: 11px; cursor: pointer; padding: 6px 0; margin-top: 10px; }\
+    .g2c-toggle-log:hover { color: #aaa; }\
+    .g2c-drag-handle { cursor: move; }\
+    .g2c-divider { height: 1px; background: #2a2a35; margin: 6px 0 10px; }\
+    .g2c-tool-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #1e1e26; border: 1px solid #252530; border-radius: 10px; margin-bottom: 6px; }\
+    .g2c-tool-label { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 8px; }\
+    .g2c-tool-label .icon { font-size: 16px; }\
+    .g2c-tool-label .sub { font-size: 10px; color: #666; display: block; }\
+    .g2c-tool-toggle { padding: 4px 12px; border-radius: 6px; border: 1px solid #333340; background: #222228; color: #999; font-size: 11px; cursor: pointer; font-weight: 600; transition: all 0.15s; }\
+    .g2c-tool-toggle:hover { border-color: #d4a574; color: #d4a574; }\
+    .g2c-tool-toggle.on { border-color: #7eb8a0; color: #7eb8a0; background: rgba(126,184,160,0.08); }\
+    .g2c-tool-toggle.checking { pointer-events: none; color: #555; }\
+    .g2c-tool-note { font-size: 10px; color: #7eb8a0; text-align: center; padding: 4px 0 2px; display: none; }\
+    .g2c-filter-panel { margin-top: 10px; }\
+    .g2c-filter-section { margin-bottom: 12px; }\
+    .g2c-filter-label { font-size: 10px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }\
+    .g2c-filter-models { max-height: 120px; overflow-y: auto; background: #141418; border: 1px solid #252530; border-radius: 8px; padding: 6px 8px; }\
+    .g2c-model-row { display: flex; align-items: center; padding: 3px 0; font-size: 12px; cursor: pointer; color: #ccc; }\
+    .g2c-model-row:hover { color: #fff; }\
+    .g2c-model-row input { margin-right: 8px; accent-color: #d4a574; }\
+    .g2c-model-row .cnt { color: #666; margin-left: auto; font-size: 10px; font-family: monospace; }\
+    .g2c-filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }\
+    .g2c-filter-input { flex: 1; padding: 6px 8px; background: #141418; border: 1px solid #252530; border-radius: 6px; color: #e8e8ec; font-size: 12px; font-family: monospace; outline: none; }\
+    .g2c-filter-input:focus { border-color: #d4a574; }\
+    .g2c-filter-input::placeholder { color: #555; }\
+    .g2c-filter-summary { font-size: 12px; color: #d4a574; padding: 8px 0; font-weight: 600; }\
+    .g2c-filter-drop { border: 1px dashed #333340; border-radius: 8px; padding: 10px; text-align: center; font-size: 11px; color: #666; cursor: pointer; transition: all 0.15s; }\
+    .g2c-filter-drop:hover { border-color: #d4a574; color: #999; }\
+    .g2c-filter-drop.active { border-color: #7eb8a0; color: #7eb8a0; }\
+    .g2c-select-btns { display: flex; gap: 6px; margin-top: 4px; }\
+    .g2c-select-btns button { background: none; border: none; color: #666; font-size: 10px; cursor: pointer; padding: 0; }\
+    .g2c-select-btns button:hover { color: #d4a574; }\
+  ";
+  document.head.appendChild(style);
+
+  // ========== PANEL HTML ==========
+  var panel = document.createElement("div");
+  panel.id = "gpt2claude-panel";
+  panel.innerHTML = '\
+    <div class="g2c-header g2c-drag-handle">\
+      <div>\
+        <div class="g2c-title"><span class="gpt">GPT</span><span class="arrow">\u2192</span><span class="claude">Claude</span></div>\
+        <div class="g2c-version">Migration Kit v2.7</div>\
+      </div>\
+      <button class="g2c-close" id="g2c-close">\u00D7</button>\
+    </div>\
+    <div class="g2c-body">\
+      <button class="g2c-btn" id="g2c-btn-memory">\
+        <div class="g2c-btn-icon">\uD83E\uDDE0</div>\
+        <div class="g2c-btn-text">\
+          Export Memories\
+          <div class="g2c-btn-sub">Facts ChatGPT learned about you</div>\
+        </div>\
+      </button>\
+      <button class="g2c-btn" id="g2c-btn-convos">\
+        <div class="g2c-btn-icon">\uD83D\uDCAC</div>\
+        <div class="g2c-btn-text">\
+          Export All Conversations\
+          <div class="g2c-btn-sub">Scans first, then you choose what to download</div>\
+        </div>\
+      </button>\
+      <button class="g2c-btn" id="g2c-btn-instructions">\
+        <div class="g2c-btn-icon">\u2699\uFE0F</div>\
+        <div class="g2c-btn-text">\
+          Export Instructions\
+          <div class="g2c-btn-sub">Custom instructions &amp; settings</div>\
+        </div>\
+      </button>\
+      <button class="g2c-btn" id="g2c-btn-all" style="border-color:#d4a574;background:#222228;">\
+        <div class="g2c-btn-icon">\uD83D\uDCE5</div>\
+        <div class="g2c-btn-text">\
+          <span style="color:#d4a574;">Export Everything</span>\
+          <div class="g2c-btn-sub">All three in one click</div>\
+        </div>\
+      </button>\
+      <div class="g2c-divider" id="g2c-camera-divider"></div>\
+      <div class="g2c-tool-row" id="g2c-camera-row">\
+        <div class="g2c-tool-label">\
+          <span class="icon">\uD83D\uDCF7</span>\
+          <span>Desktop Camera<span class="sub">Chromium only (Chrome, Brave, Edge)</span></span>\
+        </div>\
+        <button class="g2c-tool-toggle" id="g2c-camera-btn">Check</button>\
+      </div>\
+      <div class="g2c-tool-note" id="g2c-camera-note"></div>\
+      <div class="g2c-progress" id="g2c-progress" style="display:none;">\
+        <div class="g2c-progress-bar"><div class="g2c-progress-fill" id="g2c-progress-fill"></div></div>\
+        <div class="g2c-progress-text" id="g2c-progress-text"></div>\
+      </div>\
+      <button class="g2c-toggle-log" id="g2c-toggle-log">Show log \u25BC</button>\
+      <button class="g2c-copy-log" id="g2c-copy-log">Copy log</button>\
+      <div class="g2c-log" id="g2c-log"></div>\
+    </div>\
+    <div class="g2c-footer">\
+      <span class="g2c-footer-text">All data stays in your browser</span>\
+      <a class="g2c-footer-link" href="https://github.com/Siamsnus/GPT2Claude-Migration-Kit" target="_blank">GitHub</a>\
+    </div>\
+  ';
+  document.body.appendChild(panel);
+
+  // ========== DRAGGING ==========
+  var isDragging = false;
+  var dragOffsetX = 0;
+  var dragOffsetY = 0;
+  var header = panel.querySelector(".g2c-drag-handle");
+
+  header.addEventListener("mousedown", function(e) {
+    if (e.target.classList.contains("g2c-close")) return;
+    isDragging = true;
+    var rect = panel.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+    panel.style.transition = "none";
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", function(e) {
+    if (!isDragging) return;
+    panel.style.right = "auto";
+    panel.style.transform = "none";
+    panel.style.left = (e.clientX - dragOffsetX) + "px";
+    panel.style.top = (e.clientY - dragOffsetY) + "px";
+  });
+
+  document.addEventListener("mouseup", function() {
+    isDragging = false;
+    panel.style.transition = "";
+  });
+
+  // ========== HELPERS ==========
+  var logEl = document.getElementById("g2c-log");
+  var progressEl = document.getElementById("g2c-progress");
+  var progressFill = document.getElementById("g2c-progress-fill");
+  var progressText = document.getElementById("g2c-progress-text");
+
+  function log(msg, type) {
+    var entry = document.createElement("div");
+    entry.className = "g2c-log-entry" + (type ? " " + type : "");
+    entry.textContent = msg;
+    logEl.appendChild(entry);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setProgress(pct, text) {
+    progressEl.style.display = "block";
+    progressFill.style.width = pct + "%";
+    if (text) progressText.textContent = text;
+  }
+
+  function setButtonState(btn, state, label) {
+    btn.className = "g2c-btn " + state;
+    var iconEl = btn.querySelector(".g2c-btn-icon");
+    if (state === "running") {
+      iconEl.innerHTML = '<div class="g2c-spinner"></div>';
+    } else if (state === "done") {
+      iconEl.textContent = "\u2705";
+    } else if (state === "error") {
+      iconEl.textContent = "\u274C";
+    }
+    if (label) {
+      btn.querySelector(".g2c-btn-sub").textContent = label;
+    }
+  }
+
+  function downloadFile(content, filename, type) {
+    var blob = new Blob([content], {type: type || "text/plain"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    log("Downloaded: " + filename, "success");
+  }
+
+  // Safe event listener helper — guards against null elements in ChatGPT's SPA
+  function safeAddEvent(id, event, handler) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.addEventListener(event, handler);
+    } else {
+      log("Warning: element #" + id + " not found", "error");
+    }
+    return el;
+  }
+
+  var cachedToken = null;
+
+  async function getToken() {
+    if (cachedToken) return cachedToken;
+    log("Authenticating...");
+    var resp = await fetch("https://chatgpt.com/api/auth/session", {credentials: "include"});
+    if (resp.status !== 200) {
+      throw new Error("Auth failed (HTTP " + resp.status + "). Are you logged in?");
+    }
+    var data = await resp.json();
+    if (!data.accessToken) {
+      throw new Error("No token found. Please refresh chatgpt.com and try again.");
+    }
+    cachedToken = data.accessToken;
+    log("Authenticated OK");
+    // Detect account type (async, non-blocking)
+    detectAccount(cachedToken);
+    return cachedToken;
+  }
+
+  // Account detection — plan type, workspace info
+  var cachedAccountInfo = null;
+  async function detectAccount(token) {
+    if (cachedAccountInfo) return cachedAccountInfo;
+    try {
+      var resp = await fetch("https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27", {
+        credentials: "include",
+        headers: {"Authorization": "Bearer " + token}
+      });
+      if (resp.status !== 200) {
+        log("Account check: HTTP " + resp.status);
+        return null;
+      }
+      var data = await resp.json();
+      var accounts = data.accounts || {};
+      var acctIds = Object.keys(accounts).filter(function(k) { return k !== "default"; });
+      if (acctIds.length === 0) return null;
+      var primary = accounts[acctIds[0]];
+      var acct = primary.account || {};
+      cachedAccountInfo = {
+        account_id: acct.account_id || acctIds[0],
+        plan_type: acct.plan_type || "unknown",
+        structure: acct.structure || "unknown",
+        workspace_type: acct.workspace_type || null,
+        organization_id: acct.organization_id || null,
+        is_hipaa: acct.is_hipaa_compliant_workspace || false,
+        features: primary.features || []
+      };
+      var label = cachedAccountInfo.plan_type.charAt(0).toUpperCase() + cachedAccountInfo.plan_type.slice(1);
+      var structLabel = cachedAccountInfo.structure === "personal" ? "personal" : cachedAccountInfo.structure;
+      if (cachedAccountInfo.workspace_type) structLabel += "/" + cachedAccountInfo.workspace_type;
+      log("Account: " + label + " (" + structLabel + ")");
+      if (cachedAccountInfo.structure !== "personal" && cachedAccountInfo.workspace_type) {
+        log("Workspace detected: " + cachedAccountInfo.workspace_type, "success");
+      }
+      return cachedAccountInfo;
+    } catch (e) {
+      log("Account detection: " + e.message);
+      return null;
+    }
+  }
+
+  // Extract model from conversation metadata — tries multiple field names
+  function getConvoModel(c) {
+    return c.default_model_slug || c.model || c.model_slug || c.gpt_model || "unknown";
+  }
+
+  // Extract timestamp from conversation — handles epoch (seconds or ms) and ISO strings
+  function getConvoTime(c) {
+    var raw = c.update_time || c.updated_at || c.create_time || c.created_at || 0;
+    if (!raw) return 0;
+    if (typeof raw === "string") {
+      // ISO date string
+      var parsed = new Date(raw).getTime() / 1000;
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    // Epoch: if > 1e12 it's milliseconds, convert to seconds
+    if (raw > 1e12) return raw / 1000;
+    return raw;
+  }
+
+  // ========== EXPORT: MEMORIES ==========
+  async function exportMemories() {
+    var btn = document.getElementById("g2c-btn-memory");
+    setButtonState(btn, "running", "Exporting...");
+
+    try {
+      var token = await getToken();
+
+      log("Fetching memories...");
+      var resp = await fetch("https://chatgpt.com/backend-api/memories?include_memory_entries=true", {
+        credentials: "include",
+        headers: {"Authorization": "Bearer " + token}
+      });
+
+      if (resp.status !== 200) {
+        throw new Error("Could not fetch memories (HTTP " + resp.status + ")");
+      }
+
+      var data = await resp.json();
+      var memories = data.memories || data.results || data;
+      var md = "# ChatGPT Memory Export\n";
+      md += "# Exported: " + new Date().toISOString() + "\n";
+      md += "# Tool: GPT2Claude Migration Kit v2.7\n";
+      if (data.memory_num_tokens) md += "# Tokens used: " + data.memory_num_tokens + " / " + (data.memory_max_tokens || "?") + "\n";
+      md += "\n";
+
+      var count = 0;
+      var warmCount = 0;
+      var coldCount = 0;
+      if (Array.isArray(memories)) {
+        count = memories.length;
+        // Sort: warm first, then cold
+        memories.sort(function(a, b) {
+          if (a.status === "warm" && b.status !== "warm") return -1;
+          if (a.status !== "warm" && b.status === "warm") return 1;
+          return 0;
+        });
+        for (var i = 0; i < memories.length; i++) {
+          var m = memories[i];
+          var content = m.content || m.value || m.text || m.memory || JSON.stringify(m);
+          var status = m.status || "unknown";
+          if (status === "warm") warmCount++;
+          else if (status === "cold") coldCount++;
+          var tag = status === "cold" ? " [older/less relevant]" : "";
+          md += (i + 1) + ". " + content + tag + "\n";
+        }
+      } else {
+        md += JSON.stringify(memories, null, 2);
+      }
+
+      var summary = count + " memories (" + warmCount + " active" + (coldCount > 0 ? ", " + coldCount + " older" : "") + ")";
+      log("Found " + summary);
+      downloadFile(md, "chatgpt_memories.md", "text/markdown");
+      setButtonState(btn, "done", summary);
+
+    } catch (err) {
+      log("Memory export failed: " + err.message, "error");
+      setButtonState(btn, "error", err.message);
+    }
+  }
+
+  // ========== EXPORT: CONVERSATIONS ==========
+  var scannedConvos = [];
+  var previousExportIds = {};
+  var BATCH_SIZE = 10;
+
+  async function exportConversations() {
+    var btn = document.getElementById("g2c-btn-convos");
+    setButtonState(btn, "running", "Scanning...");
+
+    // Show indeterminate progress
+    var progressEl = document.getElementById("g2c-progress");
+    progressEl.style.display = "block";
+    var fillEl = document.getElementById("g2c-progress-fill");
+    fillEl.classList.add("indeterminate");
+    fillEl.style.width = "100%";
+
+    // Insert scan hero display (State 2)
+    var scanHero = document.createElement("div");
+    scanHero.className = "g2c-scan-hero";
+    scanHero.id = "g2c-scan-hero";
+    scanHero.innerHTML = '<div class="g2c-scan-count" id="g2c-scan-count">0</div>' +
+      '<div class="g2c-scan-label">conversations found</div>' +
+      '<div class="g2c-scan-status" id="g2c-scan-status">' +
+        '<span class="g2c-scan-dots"><span></span><span></span><span></span></span>' +
+        ' Scanning your conversations\u2026' +
+      '</div>' +
+      '<div class="g2c-scan-models" id="g2c-scan-models"></div>' +
+      '<div class="g2c-scan-reassure">Filter options appear when scan completes</div>';
+    progressEl.parentNode.insertBefore(scanHero, progressEl.nextSibling);
+
+    try {
+      var token = await getToken();
+      var headers = {"Authorization": "Bearer " + token};
+      scannedConvos = [];
+      var offset = 0;
+      var liveModels = {};
+      var scanLimit = 100;
+
+      log("Scanning conversation list...");
+
+      while (true) {
+        var listResp = await fetch(
+          "https://chatgpt.com/backend-api/conversations?offset=" + offset + "&limit=" + scanLimit + "&order=updated",
+          {credentials: "include", headers: headers}
+        );
+
+        if (listResp.status !== 200) {
+          throw new Error("Could not get conversations (HTTP " + listResp.status + ")");
+        }
+
+        var listData = await listResp.json();
+        var items = listData.items || [];
+        log("Batch: " + items.length + " conversations (offset " + offset + ")");
+
+        // Log first item's keys for diagnostics
+        if (offset === 0 && items.length > 0) {
+          var sampleKeys = Object.keys(items[0]).join(", ");
+          log("API fields: " + sampleKeys);
+          var sample = items[0];
+          log("Sample model: " + (sample.default_model_slug || sample.model || sample.model_slug || "null"));
+          log("Sample time: update=" + sample.update_time + " create=" + sample.create_time);
+          log("Sample gizmo: " + (sample.gizmo_id || sample.conversation_template_id || sample.workspace_id || "none"));
+        }
+
+        for (var j = 0; j < items.length; j++) {
+          scannedConvos.push(items[j]);
+          var m = getConvoModel(items[j]);
+          liveModels[m] = (liveModels[m] || 0) + 1;
+        }
+
+        // Update scan hero display
+        var countEl = document.getElementById("g2c-scan-count");
+        var statusEl = document.getElementById("g2c-scan-status");
+        if (countEl) countEl.textContent = scannedConvos.length.toLocaleString();
+        if (statusEl) {
+          statusEl.innerHTML = items.length >= scanLimit
+            ? '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Still scanning \u2014 this takes a minute, all good'
+            : 'Scan complete!';
+        }
+
+        // Update model tags
+        var tagsHtml = "";
+        var modelKeys = Object.keys(liveModels).sort(function(a, b) { return liveModels[b] - liveModels[a]; });
+        for (var mi = 0; mi < modelKeys.length; mi++) {
+          tagsHtml += '<span class="g2c-scan-tag">' + modelKeys[mi] + ' (' + liveModels[modelKeys[mi]] + ')</span>';
+        }
+        var modelsEl = document.getElementById("g2c-scan-models");
+        if (modelsEl) modelsEl.innerHTML = tagsHtml;
+
+        offset += items.length;
+        if (items.length < scanLimit) break;
+        await new Promise(function(r) { setTimeout(r, 500); });
+      }
+
+      log("Total conversations: " + scannedConvos.length);
+
+      // Discover and fetch project conversations via 5-method cascade
+      try {
+        log("Checking for projects...");
+        var statusEl = document.getElementById("g2c-scan-status");
+        if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Checking projects\u2026';
+
+        var discoveredProjects = {};
+        var discoveryMethods = [];
+
+        // Method 1: Conversation scan — check fetched conversations for gizmo_id fields
+        var method1Count = 0;
+        for (var gi = 0; gi < scannedConvos.length; gi++) {
+          var gid = scannedConvos[gi].gizmo_id || scannedConvos[gi].conversation_template_id || scannedConvos[gi].workspace_id || null;
+          if (gid && gid.indexOf("g-p-") === 0 && !discoveredProjects[gid]) {
+            discoveredProjects[gid] = null; // name unknown yet
+            method1Count++;
+          }
+        }
+        if (method1Count > 0) discoveryMethods.push("conversation scan");
+
+        // Method 2: /projects API — try the projects index endpoint (NEW)
+        var api404Count = 0;
+        try {
+          var projectsResp = await fetch(
+            "https://chatgpt.com/backend-api/projects",
+            {credentials: "include", headers: headers}
+          );
+          if (projectsResp.status === 200) {
+            var projectsData = await projectsResp.json();
+            var projectsList = projectsData.items || projectsData.projects || projectsData.list || [];
+            if (Array.isArray(projectsList)) {
+              var method2Count = 0;
+              for (var p2i = 0; p2i < projectsList.length; p2i++) {
+                var proj = projectsList[p2i].resource || projectsList[p2i].gizmo || projectsList[p2i];
+                var p2id = proj.id || proj.gizmo_id || proj.short_url || "";
+                if (p2id.indexOf("g-p-") === 0 && !discoveredProjects[p2id]) {
+                  var p2name = (proj.display && proj.display.name) || proj.name || proj.title || null;
+                  discoveredProjects[p2id] = p2name;
+                  method2Count++;
+                }
+              }
+              if (method2Count > 0) discoveryMethods.push("/projects API");
+            }
+          } else {
+            if (projectsResp.status === 404) api404Count++;
+            log("/projects API: HTTP " + projectsResp.status);
+          }
+        } catch (p2err) {
+          log("/projects API failed: " + p2err.message);
+        }
+
+        // Method 3: /gizmos/discovery/mine API — existing gizmos endpoint
+        try {
+          var gizmoResp = await fetch(
+            "https://chatgpt.com/backend-api/gizmos/discovery/mine",
+            {credentials: "include", headers: headers}
+          );
+          if (gizmoResp.status === 200) {
+            var gizmoData = await gizmoResp.json();
+            var gizmoItems = gizmoData.list || gizmoData.items || gizmoData.gizmos || [];
+            if (Array.isArray(gizmoItems)) {
+              var method3Count = 0;
+              for (var gmi = 0; gmi < gizmoItems.length; gmi++) {
+                var gizmo = gizmoItems[gmi].resource || gizmoItems[gmi].gizmo || gizmoItems[gmi];
+                var gizmoId = gizmo.id || gizmo.short_url || "";
+                if (gizmoId.indexOf("g-p-") === 0 || (gizmo.type && gizmo.type === "project")) {
+                  if (!discoveredProjects[gizmoId]) {
+                    var gName = (gizmo.display && gizmo.display.name) || gizmo.name || gizmo.title || null;
+                    discoveredProjects[gizmoId] = gName;
+                    method3Count++;
+                  }
+                }
+              }
+              if (method3Count > 0) discoveryMethods.push("/gizmos API");
+            }
+          } else {
+            if (gizmoResp.status === 404) api404Count++;
+            log("/gizmos API: HTTP " + gizmoResp.status);
+          }
+        } catch (apiErr) {
+          log("/gizmos API failed: " + apiErr.message);
+        }
+
+        // Warn if both API endpoints returned 404
+        if (api404Count >= 2) {
+          log("\u26a0\ufe0f Both project API endpoints returned 404 \u2014 relying on DOM/conversation discovery", "warn");
+        }
+
+        // Method 4: DOM scraping — 5 CSS selectors + deep fallback
+        var method4Count = 0;
+        var domSelectors = [
+          'a[href*="/g/g-p-"]',
+          'a[href*="/project/"]',
+          'nav a[href*="g-p-"]',
+          '[data-testid*="project"] a',
+          'li a[href*="g-p-"]'
+        ];
+        var domFoundIds = {};
+        for (var ds = 0; ds < domSelectors.length; ds++) {
+          try {
+            var domLinks = document.querySelectorAll(domSelectors[ds]);
+            for (var dl = 0; dl < domLinks.length; dl++) {
+              var domHref = domLinks[dl].getAttribute("href") || "";
+              var domMatch = domHref.match(/g-p-[a-f0-9]+/);
+              if (!domMatch) continue;
+              var domProjId = domMatch[0];
+              if (domFoundIds[domProjId] || discoveredProjects[domProjId]) continue;
+              if (domHref.indexOf("/c/") > -1) continue; // skip conversation links
+              var domSlug = domHref.match(/g-p-[a-f0-9]+-([^/]+)/);
+              var domText = domLinks[dl].textContent.trim();
+              var domName = domText || (domSlug ? domSlug[1].replace(/-/g, " ") : null);
+              discoveredProjects[domProjId] = domName;
+              domFoundIds[domProjId] = true;
+              method4Count++;
+            }
+          } catch (selErr) {
+            // selector not supported, skip
+          }
+        }
+
+        // Deep fallback: scan ALL anchor elements for g-p- patterns
+        if (method4Count === 0) {
+          try {
+            var allAnchors = document.querySelectorAll("a[href]");
+            for (var aa = 0; aa < allAnchors.length; aa++) {
+              var aaHref = allAnchors[aa].getAttribute("href") || "";
+              if (aaHref.indexOf("g-p-") === -1) continue;
+              var aaMatch = aaHref.match(/g-p-[a-f0-9]+/);
+              if (!aaMatch) continue;
+              var aaProjId = aaMatch[0];
+              if (domFoundIds[aaProjId] || discoveredProjects[aaProjId]) continue;
+              if (aaHref.indexOf("/c/") > -1) continue;
+              var aaSlug = aaHref.match(/g-p-[a-f0-9]+-([^/]+)/);
+              var aaText = allAnchors[aa].textContent.trim();
+              var aaName = aaText || (aaSlug ? aaSlug[1].replace(/-/g, " ") : null);
+              discoveredProjects[aaProjId] = aaName;
+              domFoundIds[aaProjId] = true;
+              method4Count++;
+            }
+          } catch (deepErr) {
+            // deep scan failed, not critical
+          }
+        }
+        if (method4Count > 0) discoveryMethods.push("DOM");
+
+        // Method 5: __NEXT_DATA__ scan — extract project IDs from Next.js app state (NEW)
+        var method5Count = 0;
+        try {
+          var nextDataEl = document.getElementById("__NEXT_DATA__");
+          if (nextDataEl) {
+            var nextText = nextDataEl.textContent || nextDataEl.innerText || "";
+            var nextMatches = nextText.match(/g-p-[a-f0-9]+/g);
+            if (nextMatches) {
+              var nextSeen = {};
+              for (var nm = 0; nm < nextMatches.length; nm++) {
+                var nextId = nextMatches[nm];
+                if (nextSeen[nextId] || discoveredProjects[nextId]) continue;
+                nextSeen[nextId] = true;
+                discoveredProjects[nextId] = null;
+                method5Count++;
+              }
+              if (method5Count > 0) discoveryMethods.push("__NEXT_DATA__");
+            }
+          }
+        } catch (nextErr) {
+          // __NEXT_DATA__ not available or parse failed
+        }
+
+        var projIds = Object.keys(discoveredProjects);
+        if (projIds.length > 0) {
+          log("Found " + projIds.length + " project(s) via " + (discoveryMethods.length > 0 ? discoveryMethods.join(" + ") : "unknown"));
+
+          // Build index of existing conversation IDs for deduplication
+          var existingIdx = {};
+          for (var ei = 0; ei < scannedConvos.length; ei++) {
+            existingIdx[scannedConvos[ei].id] = ei;
+          }
+
+          var totalProjNew = 0;
+          var totalProjTagged = 0;
+
+          for (var pi = 0; pi < projIds.length; pi++) {
+            var projId = projIds[pi];
+            var projName = discoveredProjects[projId];
+
+            // Try to resolve project name if unknown
+            if (!projName) {
+              try {
+                var infoResp = await fetch(
+                  "https://chatgpt.com/backend-api/gizmos/" + projId,
+                  {credentials: "include", headers: headers}
+                );
+                if (infoResp.status === 200) {
+                  var infoData = await infoResp.json();
+                  var gizmoInfo = infoData.gizmo || infoData;
+                  projName = (gizmoInfo.display && gizmoInfo.display.name) || gizmoInfo.name || gizmoInfo.title || "Project";
+                  log("Resolved project name: " + projName);
+                }
+              } catch (nameErr) {
+                projName = "Project";
+              }
+              discoveredProjects[projId] = projName;
+            }
+
+            log("Fetching project: " + projName + " (" + projId + ")");
+            var statusEl = document.getElementById("g2c-scan-status");
+            if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Scanning project: ' + projName + '\u2026';
+
+            var cursor = 0;
+            var projConvoCount = 0;
+            var projTaggedCount = 0;
+            while (true) {
+              var projConvoResp = await fetch(
+                "https://chatgpt.com/backend-api/gizmos/" + projId + "/conversations?cursor=" + cursor,
+                {credentials: "include", headers: headers}
+              );
+              if (projConvoResp.status !== 200) {
+                log("Project " + projName + ": HTTP " + projConvoResp.status, "error");
+                break;
+              }
+              var projConvoData = await projConvoResp.json();
+              var projItems = projConvoData.items || [];
+              for (var pj = 0; pj < projItems.length; pj++) {
+                projItems[pj]._project = projName;
+                projItems[pj]._project_id = projId;
+
+                // Cross-discovery: check fetched conversations for new project IDs
+                var crossGid = projItems[pj].gizmo_id || null;
+                if (crossGid && crossGid.indexOf("g-p-") === 0 && !discoveredProjects[crossGid]) {
+                  discoveredProjects[crossGid] = null;
+                  projIds.push(crossGid); // add to queue — will be fetched in later iterations
+                  log("Cross-discovered project: " + crossGid);
+                }
+
+                // Only add if not already in main scan (deduplicate)
+                if (existingIdx[projItems[pj].id] === undefined) {
+                  scannedConvos.push(projItems[pj]);
+                  existingIdx[projItems[pj].id] = scannedConvos.length - 1;
+                  projConvoCount++;
+                } else {
+                  // Tag the existing entry as belonging to this project
+                  var dupIdx = existingIdx[projItems[pj].id];
+                  scannedConvos[dupIdx]._project = projName;
+                  scannedConvos[dupIdx]._project_id = projId;
+                  projTaggedCount++;
+                }
+              }
+              var countEl = document.getElementById("g2c-scan-count");
+              if (countEl) countEl.textContent = scannedConvos.length.toLocaleString();
+
+              // Cursor-based pagination: null cursor means no more pages
+              if (projConvoData.cursor === null || projConvoData.cursor === undefined || projItems.length === 0) break;
+              cursor = projConvoData.cursor;
+              await new Promise(function(r) { setTimeout(r, 500); });
+            }
+            log("Project " + projName + ": " + projConvoCount + " new, " + projTaggedCount + " tagged");
+            totalProjNew += projConvoCount;
+            totalProjTagged += projTaggedCount;
+          }
+          log("Projects total: " + totalProjNew + " new conversations from " + projIds.length + " project(s)");
+          log("Total with projects: " + scannedConvos.length);
+        } else {
+          // Smart hint: check if any conversations reference projects despite no discovery
+          var hasProjectRefs = false;
+          for (var hpr = 0; hpr < scannedConvos.length; hpr++) {
+            if (scannedConvos[hpr].gizmo_id && scannedConvos[hpr].gizmo_id.indexOf("g-p-") === 0) {
+              hasProjectRefs = true;
+              break;
+            }
+          }
+          if (hasProjectRefs) {
+            log("No projects discovered, but conversations contain project references. Try scrolling sidebar to load projects into DOM, then re-scan.");
+          } else {
+            log("No projects found");
+          }
+        }
+      } catch (projErr) {
+        log("Projects check failed: " + projErr.message + " (continuing without)");
+      }
+
+      // Discover shared conversations
+      try {
+        log("Checking shared conversations...");
+        var statusEl = document.getElementById("g2c-scan-status");
+        if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Checking shared conversations\u2026';
+
+        var sharedResp = await fetch(
+          "https://chatgpt.com/backend-api/shared_conversations?order=updated&limit=100&offset=0",
+          {credentials: "include", headers: headers}
+        );
+
+        if (sharedResp.status === 200) {
+          var sharedData = await sharedResp.json();
+          var sharedItems = sharedData.items || [];
+          var lastPageSize = sharedItems.length;
+          log("Shared: " + sharedItems.length + " fetched (page 1)");
+
+          // Paginate if last page was full (more pages likely exist)
+          // Hard cap at 50 pages (5,000 items) to prevent runaway pagination
+          var sharedOffset = sharedItems.length;
+          var sharedPages = 1;
+          var maxSharedPages = 50;
+          var sharedSeenIds = {};
+          for (var si0 = 0; si0 < sharedItems.length; si0++) sharedSeenIds[sharedItems[si0].id] = true;
+
+          while (lastPageSize >= 100 && sharedPages < maxSharedPages) {
+            if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Shared: ' + sharedItems.length + ' fetched\u2026';
+            var moreResp = await fetch(
+              "https://chatgpt.com/backend-api/shared_conversations?order=updated&limit=100&offset=" + sharedOffset,
+              {credentials: "include", headers: headers}
+            );
+            if (moreResp.status !== 200) {
+              log("Shared page HTTP " + moreResp.status + " — stopping pagination");
+              break;
+            }
+            var moreData = await moreResp.json();
+            var moreItems = moreData.items || [];
+            lastPageSize = moreItems.length;
+            if (moreItems.length === 0) break;
+
+            // Detect cycling — if we see IDs we already have, the API is looping
+            var dupeCount = 0;
+            for (var mi = 0; mi < moreItems.length; mi++) {
+              if (sharedSeenIds[moreItems[mi].id]) {
+                dupeCount++;
+              } else {
+                sharedSeenIds[moreItems[mi].id] = true;
+                sharedItems.push(moreItems[mi]);
+              }
+            }
+            sharedOffset += moreItems.length;
+            sharedPages++;
+
+            if (dupeCount > moreItems.length * 0.5) {
+              log("Shared: API returning duplicate items (" + dupeCount + "/" + moreItems.length + " dupes) — stopping");
+              break;
+            }
+
+            log("Shared: " + sharedItems.length + " unique fetched (page " + sharedPages + ")");
+            await new Promise(function(r) { setTimeout(r, 500); });
+          }
+
+          if (sharedPages >= maxSharedPages) {
+            log("Shared: hit " + maxSharedPages + " page cap — stopping (" + sharedItems.length + " items)");
+          }
+
+          // Build index of existing conversation IDs for deduplication (id → array index)
+          var existingIdIdx = {};
+          for (var ei = 0; ei < scannedConvos.length; ei++) {
+            existingIdIdx[scannedConvos[ei].id] = ei;
+          }
+
+          var newShared = 0;
+          var taggedShared = 0;
+          for (var si = 0; si < sharedItems.length; si++) {
+            var shared = sharedItems[si];
+            // Shared items might have conversation_id linking to a regular conversation
+            var sharedConvoId = shared.conversation_id || shared.id;
+            if (existingIdIdx[sharedConvoId] !== undefined) {
+              // Already in main list — tag it as shared using index lookup (O(1))
+              var tagIdx = existingIdIdx[sharedConvoId];
+              scannedConvos[tagIdx]._also_shared = true;
+              scannedConvos[tagIdx]._share_id = shared.share_id || shared.id;
+              taggedShared++;
+            } else {
+              // New shared conversation — add to scan list
+              shared._shared = true;
+              shared._share_id = shared.share_id || shared.id;
+              if (!shared.title) shared.title = shared.title || "Shared conversation";
+              scannedConvos.push(shared);
+              newShared++;
+            }
+          }
+
+          if (sharedItems.length > 0) {
+            log("Shared conversations: " + sharedItems.length + " found (" + newShared + " unique, " + taggedShared + " already in main)");
+          } else {
+            log("No shared conversations");
+          }
+
+          var countEl = document.getElementById("g2c-scan-count");
+          if (countEl) countEl.textContent = scannedConvos.length.toLocaleString();
+        } else if (sharedResp.status !== 404) {
+          log("Shared conversations: HTTP " + sharedResp.status + " (skipped)");
+        } else {
+          log("No shared conversations");
+        }
+      } catch (sharedErr) {
+        log("Shared conversations check: " + sharedErr.message + " (continuing without)");
+      }
+
+      // Discover archived conversations
+      try {
+        log("Checking archived conversations...");
+        var statusEl = document.getElementById("g2c-scan-status");
+        if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Checking archived conversations\u2026';
+
+        var archivedItems = [];
+        var archivedOffset = 0;
+        var archivedPage = 0;
+
+        while (true) {
+          archivedPage++;
+          var archivedResp = await fetch(
+            "https://chatgpt.com/backend-api/conversations?is_archived=true&limit=100&offset=" + archivedOffset,
+            {credentials: "include", headers: headers}
+          );
+          if (archivedResp.status !== 200) {
+            if (archivedPage === 1) log("Archived conversations: HTTP " + archivedResp.status + " (skipped)");
+            break;
+          }
+          var archivedData = await archivedResp.json();
+          var archivedPageItems = archivedData.items || [];
+          if (archivedPageItems.length === 0) break;
+
+          for (var ai = 0; ai < archivedPageItems.length; ai++) {
+            archivedPageItems[ai]._archived = true;
+            archivedItems.push(archivedPageItems[ai]);
+          }
+
+          if (statusEl) statusEl.innerHTML = '<span class="g2c-scan-dots"><span></span><span></span><span></span></span> Archived: ' + archivedItems.length + ' fetched\u2026';
+          log("Archived: " + archivedItems.length + " fetched (page " + archivedPage + ")");
+
+          if (archivedPageItems.length < 100) break;
+          archivedOffset += archivedPageItems.length;
+          await new Promise(function(r) { setTimeout(r, 500); });
+        }
+
+        if (archivedItems.length > 0) {
+          // Deduplicate against main scan list
+          var existingIdArchive = {};
+          for (var eai = 0; eai < scannedConvos.length; eai++) {
+            existingIdArchive[scannedConvos[eai].id] = eai;
+          }
+
+          var newArchived = 0;
+          var taggedArchived = 0;
+          for (var ari = 0; ari < archivedItems.length; ari++) {
+            var archItem = archivedItems[ari];
+            if (existingIdArchive[archItem.id] !== undefined) {
+              // Already in main list — tag it as archived
+              var archIdx = existingIdArchive[archItem.id];
+              scannedConvos[archIdx]._archived = true;
+              taggedArchived++;
+            } else {
+              scannedConvos.push(archItem);
+              newArchived++;
+            }
+          }
+
+          log("Archived conversations: " + archivedItems.length + " found (" + newArchived + " new, " + taggedArchived + " already in main)");
+          var countEl = document.getElementById("g2c-scan-count");
+          if (countEl) countEl.textContent = scannedConvos.length.toLocaleString();
+        } else {
+          log("No archived conversations");
+        }
+      } catch (archiveErr) {
+        log("Archived conversations check: " + archiveErr.message + " (continuing without)");
+      }
+
+      // Show filter panel
+      setButtonState(btn, "done", scannedConvos.length + " conversations found");
+
+      // Clean up scan hero display
+      var scanHeroEl = document.getElementById("g2c-scan-hero");
+      if (scanHeroEl) scanHeroEl.parentNode.removeChild(scanHeroEl);
+      var fillEl = document.getElementById("g2c-progress-fill");
+      fillEl.classList.remove("indeterminate");
+      fillEl.style.width = "0%";
+      document.getElementById("g2c-progress").style.display = "none";
+
+      showFilterPanel();
+
+    } catch (err) {
+      log("Scan failed: " + err.message, "error");
+      setButtonState(btn, "error", err.message);
+    }
+  }
+
+  // ========== FILTER PANEL (State 3) ==========
+  function showFilterPanel() {
+    var models = {};
+    var oldest = Infinity;
+    var newest = 0;
+    var sources = {}; // Track main vs project conversations
+    for (var i = 0; i < scannedConvos.length; i++) {
+      var c = scannedConvos[i];
+      var m = getConvoModel(c);
+      models[m] = (models[m] || 0) + 1;
+      var t = getConvoTime(c);
+      if (t > 0 && t < oldest) oldest = t;
+      if (t > 0 && t > newest) newest = t;
+      // Track source
+      var src = c._archived ? "Archived" : (c._shared ? "Shared conversations" : (c._project || "Main conversations"));
+      sources[src] = (sources[src] || 0) + 1;
+    }
+    var modelKeys = Object.keys(models).sort(function(a, b) { return models[b] - models[a]; });
+
+    function tsToDate(ts) {
+      if (!ts || ts === Infinity) return "";
+      if (typeof ts === "string") {
+        // ISO string — just extract the date part
+        var d = new Date(ts);
+        if (isNaN(d.getTime())) return "";
+        return d.toISOString().slice(0, 10);
+      }
+      var d = new Date(ts > 1e12 ? ts : ts * 1000);
+      if (isNaN(d.getTime())) return "";
+      return d.toISOString().slice(0, 10);
+    }
+
+    var modelCheckboxes = "";
+    for (var i = 0; i < modelKeys.length; i++) {
+      var mk = modelKeys[i];
+      modelCheckboxes += '<label class="g2c-model-row"><input type="checkbox" checked data-model="' + mk + '"> ' + mk + '<span class="cnt">' + models[mk] + '</span></label>';
+    }
+
+    // Build source/project checkboxes
+    var sourceKeys = Object.keys(sources).sort(function(a, b) {
+      if (a === "Main conversations") return -1;
+      if (b === "Main conversations") return 1;
+      if (a === "Archived") return 1;
+      if (b === "Archived") return -1;
+      return sources[b] - sources[a];
+    });
+    var sourceCheckboxes = "";
+    var hasProjects = sourceKeys.length > 1;
+    for (var si = 0; si < sourceKeys.length; si++) {
+      var sk = sourceKeys[si];
+      var icon = sk === "Main conversations" ? "\uD83D\uDCAC" : (sk === "Shared conversations" ? "\uD83D\uDD17" : (sk === "Archived" ? "\uD83D\uDCE6" : "\uD83D\uDCC1"));
+      sourceCheckboxes += '<label class="g2c-model-row"><input type="checkbox" checked data-source="' + sk + '"> ' + icon + ' ' + sk + '<span class="cnt">' + sources[sk] + '</span></label>';
+    }
+
+    // Scan summary — show breakdown if applicable
+    var projCount = 0;
+    var projConvoCount = scannedConvos.filter(function(c) { return c._project; }).length;
+    var archivedCount = scannedConvos.filter(function(c) { return c._archived; }).length;
+    var sharedOnlyCount = scannedConvos.filter(function(c) { return c._shared; }).length;
+    for (var ski = 0; ski < sourceKeys.length; ski++) {
+      if (sourceKeys[ski] !== "Main conversations" && sourceKeys[ski] !== "Shared conversations" && sourceKeys[ski] !== "Archived") projCount++;
+    }
+    var mainCount = scannedConvos.length - projConvoCount - archivedCount - sharedOnlyCount;
+    var scanSummaryText = scannedConvos.length.toLocaleString() + '</span>' +
+      '<span style="font-size:12px;color:#888;"> conversations scanned</span>';
+    var breakdownParts = [];
+    if (mainCount > 0) breakdownParts.push(mainCount.toLocaleString() + ' main');
+    if (archivedCount > 0) breakdownParts.push(archivedCount + ' archived');
+    if (projConvoCount > 0) breakdownParts.push(projConvoCount + ' from ' + projCount + ' project' + (projCount > 1 ? 's' : ''));
+    if (sharedOnlyCount > 0) breakdownParts.push(sharedOnlyCount + ' shared');
+    if (breakdownParts.length > 1) {
+      scanSummaryText += '<div style="font-size:11px;color:#7eb8a0;margin-top:4px;">' + breakdownParts.join(' + ') + '</div>';
+    }
+    var scanSummary = '<div style="text-align:center;margin-bottom:14px;">' +
+      '<span style="font-size:28px;font-weight:800;color:#7eb8a0;">' + scanSummaryText +
+      '</div>';
+
+    // Determine if model filter is useful (not just "unknown")
+    var hasRealModels = modelKeys.length > 1 || (modelKeys.length === 1 && modelKeys[0] !== "unknown");
+
+    var modelSection = '';
+    if (hasRealModels) {
+      modelSection = '\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Models</div>\
+          <div class="g2c-filter-models" id="g2c-filter-models">' + modelCheckboxes + '</div>\
+          <div class="g2c-select-btns"><button id="g2c-sel-all">Select all</button> \u00B7 <button id="g2c-sel-none">Select none</button></div>\
+        </div>';
+    }
+
+    var filterHtml = '\
+      <div class="g2c-filter-panel" id="g2c-filter-panel">\
+        ' + scanSummary + '\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Search conversations</div>\
+          <input type="text" class="g2c-filter-input" id="g2c-search" placeholder="Filter by title\u2026" style="width:100%;">\
+          <div style="font-size:10px;color:#555;margin-top:3px;">Filters by conversation title. Leave empty = all.</div>\
+        </div>\
+        ' + (hasProjects ? '\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Source</div>\
+          <div class="g2c-filter-models" id="g2c-filter-sources">' + sourceCheckboxes + '</div>\
+        </div>' : '') + '\
+        ' + modelSection + '\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Date range</div>\
+          <div class="g2c-filter-row">\
+            <input type="date" class="g2c-filter-input" id="g2c-date-from" value="' + tsToDate(oldest) + '">\
+            <span style="color:#555;">\u2192</span>\
+            <input type="date" class="g2c-filter-input" id="g2c-date-to" value="' + tsToDate(newest) + '">\
+          </div>\
+          <div class="g2c-select-btns" id="g2c-era-btns" style="flex-wrap:wrap;margin-top:4px;">\
+            <button data-era="all">All</button> \u00B7\
+            <button data-era="gpt35">GPT-3.5</button> \u00B7\
+            <button data-era="gpt4">GPT-4</button> \u00B7\
+            <button data-era="gpt4o">GPT-4o</button> \u00B7\
+            <button data-era="gpt5">GPT-5+</button>\
+          </div>\
+        </div>\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Max conversations (0 = all)</div>\
+          <input type="number" class="g2c-filter-input" id="g2c-limit" value="0" min="0" style="width:100%;">\
+        </div>\
+        <div class="g2c-filter-section">\
+          <div class="g2c-filter-label">Incremental export (skip already exported)</div>\
+          <div class="g2c-filter-drop" id="g2c-prev-drop">Drop or click to load previous export</div>\
+          <input type="file" id="g2c-prev-file" accept=".json" style="display:none;">\
+        </div>\
+        <div class="g2c-filter-summary" id="g2c-filter-summary">' + scannedConvos.length + ' conversations selected</div>\
+        <button class="g2c-btn" id="g2c-btn-download" style="border-color:#d4a574;margin-bottom:0;">\
+          <div class="g2c-btn-icon">\uD83D\uDCE5</div>\
+          <div class="g2c-btn-text"><span style="color:#d4a574;">Download ' + scannedConvos.length + ' conversations</span>\
+            <div class="g2c-btn-sub">~' + estimateTime(scannedConvos.length) + '</div>\
+          </div>\
+        </button>\
+      </div>';
+
+    // Insert filter panel — with fallback for SPA DOM issues
+    var bodyEl = panel.querySelector(".g2c-body");
+    if (!bodyEl) {
+      log("Warning: panel body not found", "error");
+      return;
+    }
+    var progressEl = document.getElementById("g2c-progress");
+    var filterDiv = document.createElement("div");
+    filterDiv.innerHTML = filterHtml;
+    var filterPanel = filterDiv.firstElementChild || filterDiv.firstChild;
+    if (progressEl && progressEl.parentNode) {
+      progressEl.parentNode.insertBefore(filterPanel, progressEl);
+    } else {
+      bodyEl.appendChild(filterPanel);
+    }
+
+    // Hide the main buttons — with null guards
+    var hideIds = ["g2c-btn-memory", "g2c-btn-convos", "g2c-btn-instructions", "g2c-btn-all", "g2c-camera-divider", "g2c-camera-row", "g2c-camera-note"];
+    for (var hi = 0; hi < hideIds.length; hi++) {
+      var hideEl = document.getElementById(hideIds[hi]);
+      if (hideEl) hideEl.style.display = "none";
+    }
+
+    // Wire up events using safeAddEvent (BUG FIX)
+    if (hasRealModels) {
+      safeAddEvent("g2c-sel-all", "click", function() {
+        var boxes = document.querySelectorAll("#g2c-filter-models input");
+        for (var i = 0; i < boxes.length; i++) boxes[i].checked = true;
+        updateFilterSummary();
+      });
+      safeAddEvent("g2c-sel-none", "click", function() {
+        var boxes = document.querySelectorAll("#g2c-filter-models input");
+        for (var i = 0; i < boxes.length; i++) boxes[i].checked = false;
+        updateFilterSummary();
+      });
+    }
+
+    safeAddEvent("g2c-prev-drop", "click", function() {
+      var fileInput = document.getElementById("g2c-prev-file");
+      if (fileInput) fileInput.click();
+    });
+
+    var filterInputs = document.querySelectorAll("#g2c-filter-models input, #g2c-filter-sources input, #g2c-date-from, #g2c-date-to, #g2c-limit");
+    for (var fi = 0; fi < filterInputs.length; fi++) {
+      filterInputs[fi].addEventListener("change", updateFilterSummary);
+    }
+    // Search box — live filtering as you type
+    var searchInput = document.getElementById("g2c-search");
+    if (searchInput) searchInput.addEventListener("input", updateFilterSummary);
+
+    // Era preset buttons
+    var eraRanges = {
+      "all": [tsToDate(oldest), tsToDate(newest)],
+      "gpt35": ["2022-11-30", "2023-03-13"],
+      "gpt4": ["2023-03-14", "2024-05-12"],
+      "gpt4o": ["2024-05-13", "2025-08-06"],
+      "gpt5": ["2025-08-07", tsToDate(newest)]
+    };
+    var eraBtns = document.querySelectorAll("#g2c-era-btns button");
+    for (var ei = 0; ei < eraBtns.length; ei++) {
+      eraBtns[ei].addEventListener("click", function() {
+        var era = this.getAttribute("data-era");
+        var range = eraRanges[era];
+        if (range) {
+          var fromEl = document.getElementById("g2c-date-from");
+          var toEl = document.getElementById("g2c-date-to");
+          if (fromEl) fromEl.value = range[0];
+          if (toEl) toEl.value = range[1];
+          // Highlight active era button
+          var siblings = document.querySelectorAll("#g2c-era-btns button");
+          for (var si = 0; si < siblings.length; si++) siblings[si].style.color = "";
+          this.style.color = "#d4a574";
+          updateFilterSummary();
+        }
+      });
+    }
+
+    safeAddEvent("g2c-prev-file", "change", function() {
+      if (this.files.length) loadPreviousExport(this.files[0]);
+    });
+    var dropEl = document.getElementById("g2c-prev-drop");
+    if (dropEl) {
+      dropEl.addEventListener("dragover", function(e) { e.preventDefault(); this.style.borderColor = "#d4a574"; });
+      dropEl.addEventListener("dragleave", function() { this.style.borderColor = ""; });
+      dropEl.addEventListener("drop", function(e) {
+        e.preventDefault();
+        this.style.borderColor = "";
+        if (e.dataTransfer.files.length) loadPreviousExport(e.dataTransfer.files[0]);
+      });
+    }
+
+    safeAddEvent("g2c-btn-download", "click", startFilteredDownload);
+
+    // Ensure all model and source checkboxes are programmatically checked (defensive)
+    var allBoxes = document.querySelectorAll("#g2c-filter-models input, #g2c-filter-sources input");
+    for (var bi = 0; bi < allBoxes.length; bi++) allBoxes[bi].checked = true;
+
+    // Force-recalculate summary after DOM is fully wired
+    updateFilterSummary();
+  }
+
+  function estimateTime(count) {
+    // Real-world calibration: 3361 convos = 29m34s = ~5.3s per batch of 10
+    // Using 5s per batch as conservative estimate
+    var secs = Math.ceil(count / BATCH_SIZE) * 5;
+    if (secs < 60) return "~" + Math.max(Math.round(secs), 1) + " seconds";
+    var mins = Math.round(secs / 60);
+    if (mins < 60) return "~" + mins + " minutes";
+    var hrs = (secs / 3600).toFixed(1);
+    return "~" + hrs + " hours";
+  }
+
+  function getFilteredConvos() {
+    try {
+      var selectedModels = {};
+      var boxes = document.querySelectorAll("#g2c-filter-models input");
+      for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i].checked) selectedModels[boxes[i].getAttribute("data-model")] = true;
+      }
+
+      // Source/project filter
+      var selectedSources = {};
+      var sourceBoxes = document.querySelectorAll("#g2c-filter-sources input");
+      for (var si = 0; si < sourceBoxes.length; si++) {
+        if (sourceBoxes[si].checked) selectedSources[sourceBoxes[si].getAttribute("data-source")] = true;
+      }
+      var hasSourceFilter = sourceBoxes.length > 0 && Object.keys(selectedSources).length > 0;
+
+      // If no models selected, return all (fail-open)
+      var hasModelFilter = Object.keys(selectedModels).length > 0;
+
+      var fromEl = document.getElementById("g2c-date-from");
+      var toEl = document.getElementById("g2c-date-to");
+      var limitEl = document.getElementById("g2c-limit");
+
+      var fromStr = fromEl ? fromEl.value : "";
+      var toStr = toEl ? toEl.value : "";
+      var fromTs = fromStr ? new Date(fromStr + "T00:00:00").getTime() / 1000 : 0;
+      var toTs = toStr ? new Date(toStr + "T23:59:59").getTime() / 1000 : Infinity;
+
+      var limit = limitEl ? (parseInt(limitEl.value) || 0) : 0;
+
+      // Search filter — client-side title matching
+      var searchEl = document.getElementById("g2c-search");
+      var searchText = searchEl ? searchEl.value.trim().toLowerCase() : "";
+
+      var filtered = [];
+      var mainCount = 0;
+      for (var i = 0; i < scannedConvos.length; i++) {
+        var c = scannedConvos[i];
+
+        // Search filter — match against title
+        if (searchText) {
+          var title = (c.title || "").toLowerCase();
+          if (title.indexOf(searchText) === -1) continue;
+        }
+
+        // Source filter
+        if (hasSourceFilter) {
+          var src = c._archived ? "Archived" : (c._shared ? "Shared conversations" : (c._project || "Main conversations"));
+          if (!selectedSources[src]) continue;
+        }
+
+        var model = getConvoModel(c);
+        if (hasModelFilter && !selectedModels[model]) continue;
+
+        var ts = getConvoTime(c);
+        if (ts > 0 && (ts < fromTs || ts > toTs)) continue;
+
+        if (previousExportIds[c.id]) continue;
+
+        // Limit only applies to main conversations — project convos always included
+        if (!c._project) {
+          if (limit > 0 && mainCount >= limit) continue;
+          mainCount++;
+        }
+
+        filtered.push(c);
+      }
+      return filtered;
+    } catch (err) {
+      log("Filter error: " + err.message, "error");
+      return scannedConvos; // fail-open: return all
+    }
+  }
+
+  function updateFilterSummary() {
+    var filtered = getFilteredConvos();
+    var summary = document.getElementById("g2c-filter-summary");
+    var dlBtn = document.getElementById("g2c-btn-download");
+    var skipped = Object.keys(previousExportIds).length;
+    var text = filtered.length + " conversations selected";
+    if (skipped > 0) text += " (" + skipped + " skipped from previous export)";
+    if (summary) summary.textContent = text;
+    if (dlBtn) {
+      var spanEl = dlBtn.querySelector(".g2c-btn-text span");
+      if (spanEl) spanEl.textContent = "Download " + filtered.length + " conversations";
+      var subEl = dlBtn.querySelector(".g2c-btn-sub");
+      if (subEl) subEl.textContent = estimateTime(filtered.length);
+    }
+  }
+
+  function loadPreviousExport(file) {
+    var dropEl = document.getElementById("g2c-prev-drop");
+    if (dropEl) dropEl.textContent = "Loading " + file.name + "...";
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var data = JSON.parse(e.target.result);
+        var convos = data.conversations || data || [];
+        if (Array.isArray(convos)) {
+          previousExportIds = {};
+          for (var i = 0; i < convos.length; i++) {
+            if (convos[i].id) previousExportIds[convos[i].id] = true;
+          }
+          if (dropEl) {
+            dropEl.textContent = "\u2705 " + Object.keys(previousExportIds).length + " conversations from previous export";
+            dropEl.className = "g2c-filter-drop active";
+          }
+          log("Loaded previous export: " + Object.keys(previousExportIds).length + " conversation IDs");
+          updateFilterSummary();
+        }
+      } catch (err) {
+        if (dropEl) dropEl.textContent = "\u274C Could not parse file";
+        log("Previous export error: " + err.message, "error");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ========== CONVERSATION PROCESSING HELPERS ==========
+  function extractNodeText(node) {
+    if (!node || !node.message || !node.message.content) return "";
+    var content = node.message.content;
+
+    // Handle special content types at the top level
+    var ct = content.content_type;
+    if (ct === "model_editable_context") return ""; // system memory, skip
+    if (ct === "thoughts") {
+      // Reasoning model thinking block — OpenAI hides actual CoT
+      return "[thinking]";
+    }
+    if (ct === "reasoning_recap") {
+      // "Thought for a few seconds" etc
+      return "[" + (content.content || "Thinking...") + "]";
+    }
+    if (ct === "code" || ct === "execution_output") {
+      var lang = content.language || "";
+      var codeText = content.text || "";
+      if (lang === "unknown" && codeText.indexOf("search(") === 0) {
+        return "[\uD83D\uDD0D " + codeText + "]";
+      }
+      return "```" + lang + "\n" + codeText + "\n```";
+    }
+
+    var parts = content.parts;
+    if (!Array.isArray(parts)) return JSON.stringify(content);
+    var textParts = [];
+    for (var p = 0; p < parts.length; p++) {
+      if (typeof parts[p] === "string") {
+        textParts.push(parts[p]);
+      } else if (parts[p] && typeof parts[p] === "object") {
+        if (parts[p].content_type === "image_asset_pointer" || parts[p].asset_pointer) {
+          var imgName = (parts[p].metadata && parts[p].metadata.dalle && parts[p].metadata.dalle.prompt)
+            ? "DALL-E: " + parts[p].metadata.dalle.prompt : "image";
+          textParts.push("[\uD83D\uDDBC " + imgName + "]");
+        }
+      }
+    }
+    return textParts.join("\n")
+      .replace(/\uE200cite(\uE202turn\dsearch\d+)+\uE201/g, "")
+      .replace(/\uE200image_group\uE202\{[^}]*\}\uE201/g, "[🖼 images]")
+      .replace(/\uE200[\s\S]*?\uE201/g, "");
+  }
+
+  function extractNodeRole(node) {
+    return (node.message && node.message.author && node.message.author.role) || "unknown";
+  }
+
+  function extractNodeModel(node) {
+    return (node.message && node.message.metadata && node.message.metadata.model_slug) || null;
+  }
+
+  function extractNodeTime(node) {
+    return (node.message && node.message.create_time) || null;
+  }
+
+  function processConversationDetail(detail, listItem) {
+    var messages = [];
+    var hasBranches = false;
+
+    if (detail.mapping) {
+      var mapKeys = Object.keys(detail.mapping);
+      var rootId = null;
+      for (var mk = 0; mk < mapKeys.length; mk++) {
+        if (!detail.mapping[mapKeys[mk]].parent) {
+          rootId = mapKeys[mk];
+          break;
+        }
+      }
+      if (!rootId) rootId = mapKeys[0];
+
+      var current = rootId;
+      var visited = {};
+      var safety = 0;
+
+      while (current && safety < 50000) {
+        safety++;
+        if (visited[current]) break;
+        visited[current] = true;
+        var node = detail.mapping[current];
+        if (!node) break;
+
+        if (node.message && node.message.content) {
+          var text = extractNodeText(node);
+          if (text.trim() !== "") {
+            var msgObj = {
+              role: extractNodeRole(node),
+              content: text,
+              timestamp: extractNodeTime(node),
+              model: extractNodeModel(node)
+            };
+
+            if (node.parent && detail.mapping[node.parent]) {
+              var parentNode = detail.mapping[node.parent];
+              if (parentNode.children && parentNode.children.length > 1) {
+                var alts = [];
+                for (var ci = 0; ci < parentNode.children.length; ci++) {
+                  var sibId = parentNode.children[ci];
+                  if (sibId === current) continue;
+                  var sib = detail.mapping[sibId];
+                  if (sib && sib.message && sib.message.content) {
+                    var sibText = extractNodeText(sib);
+                    if (sibText.trim()) {
+                      alts.push({
+                        content: sibText,
+                        role: extractNodeRole(sib),
+                        timestamp: extractNodeTime(sib),
+                        model: extractNodeModel(sib)
+                      });
+                    }
+                  }
+                }
+                if (alts.length > 0) {
+                  msgObj.alternatives = alts;
+                  hasBranches = true;
+                }
+              }
+            }
+
+            messages.push(msgObj);
+          }
+        }
+
+        if (node.children && node.children.length > 0) {
+          current = node.children[node.children.length - 1];
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Extract model from mapping metadata (since list API no longer provides it)
+    var model = detail.default_model_slug || null;
+    if (!model && detail.mapping) {
+      var mKeys = Object.keys(detail.mapping);
+      for (var mi = 0; mi < mKeys.length; mi++) {
+        var mNode = detail.mapping[mKeys[mi]];
+        if (mNode && mNode.message && mNode.message.metadata && mNode.message.metadata.model_slug) {
+          model = mNode.message.metadata.model_slug;
+          break;
+        }
+      }
+    }
+
+    return {
+      id: detail.conversation_id || (listItem && listItem.id) || detail.id,
+      title: detail.title || (listItem && listItem.title) || "Untitled",
+      create_time: detail.create_time || (listItem && listItem.create_time) || null,
+      update_time: detail.update_time || (listItem && listItem.update_time) || null,
+      model: model,
+      project: (listItem && listItem._project) || null,
+      project_id: (listItem && listItem._project_id) || null,
+      archived: (listItem && listItem._archived) || false,
+      memory_scope: (listItem && listItem.memory_scope) || null,
+      is_do_not_remember: (listItem && listItem.is_do_not_remember) || false,
+      has_branches: hasBranches,
+      _mapping_node_count: detail.mapping ? Object.keys(detail.mapping).length : 0,
+      message_count: messages.length,
+      messages: messages
+    };
+  }
+
+  // ========== FILTERED DOWNLOAD (States 4 & 5) ==========
+
+  function updateDlUI(completed, total, title, startTime) {
+    var pct = Math.round((completed / total) * 100);
+    var remaining = total - completed;
+
+    var dlCount = document.getElementById("g2c-dl-count");
+    var dlTitle = document.getElementById("g2c-dl-title");
+    var dlFill = document.getElementById("g2c-dl-fill");
+    var dlPct = document.getElementById("g2c-dl-pct");
+    var dlRemaining = document.getElementById("g2c-dl-remaining");
+    var dlMode = document.getElementById("g2c-dl-mode");
+
+    if (dlCount) dlCount.textContent = completed;
+    if (dlTitle) dlTitle.textContent = title;
+    if (dlFill) dlFill.style.width = pct + "%";
+    if (dlPct) dlPct.textContent = pct + "%";
+
+    if (dlRemaining && completed > 0) {
+      var elapsed = (Date.now() - startTime) / 1000;
+      var perItem = elapsed / completed;
+      var secsLeft = Math.round(perItem * remaining);
+      if (secsLeft < 60) {
+        dlRemaining.textContent = "~" + secsLeft + " seconds remaining";
+      } else {
+        dlRemaining.textContent = "~" + Math.round(secsLeft / 60) + " minutes remaining";
+      }
+    }
+  }
+
+  async function downloadBatch(ids, token) {
+    var resp = await fetch("https://chatgpt.com/backend-api/conversations/batch", {
+      method: "POST",
+      credentials: "include",
+      headers: {"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+      body: JSON.stringify({conversation_ids: ids})
+    });
+    return resp;
+  }
+
+  async function downloadSingle(id, token) {
+    var resp = await fetch("https://chatgpt.com/backend-api/conversation/" + id, {
+      credentials: "include",
+      headers: {"Authorization": "Bearer " + token}
+    });
+    return resp;
+  }
+
+  async function downloadShared(shareId, token) {
+    var resp = await fetch("https://chatgpt.com/backend-api/share/" + shareId, {
+      credentials: "include",
+      headers: {"Authorization": "Bearer " + token}
+    });
+    return resp;
+  }
+
+  async function startFilteredDownload() {
+    var filtered = getFilteredConvos();
+    if (filtered.length === 0) {
+      alert("No conversations selected. Adjust your filters.");
+      return;
+    }
+
+    // Separate shared conversations (can't use batch endpoint)
+    var regularConvos = [];
+    var sharedConvos = [];
+    for (var fi = 0; fi < filtered.length; fi++) {
+      if (filtered[fi]._shared) {
+        sharedConvos.push(filtered[fi]);
+      } else {
+        regularConvos.push(filtered[fi]);
+      }
+    }
+
+    // Replace filter panel with download hero UI (State 4)
+    var filterPanel = document.getElementById("g2c-filter-panel");
+    if (filterPanel) {
+      filterPanel.innerHTML = '\
+        <div class="g2c-dl-hero" id="g2c-dl-hero">\
+          <span class="g2c-dl-count" id="g2c-dl-count">0</span>\
+          <span class="g2c-dl-of" id="g2c-dl-of"> / ' + filtered.length + '</span>\
+          <div class="g2c-dl-title" id="g2c-dl-title">Starting download\u2026</div>\
+        </div>\
+        <div style="margin:10px 0;">\
+          <div class="g2c-progress-bar"><div class="g2c-progress-fill" id="g2c-dl-fill" style="width:0%;"></div></div>\
+          <div class="g2c-dl-pct" id="g2c-dl-pct">0%</div>\
+        </div>\
+        <div class="g2c-dl-remaining" id="g2c-dl-remaining"></div>\
+        <div class="g2c-dl-mode" id="g2c-dl-mode" style="text-align:center;font-size:10px;color:#666;margin-top:4px;"></div>';
+    }
+
+    var startTime = Date.now();
+
+    try {
+      var token = await getToken();
+
+      var fullExport = {
+        export_date: new Date().toISOString(),
+        tool: "GPT2Claude Migration Kit v2.7",
+        format_version: 7,
+        account: cachedAccountInfo || null,
+        total_conversations: filtered.length,
+        conversations: []
+      };
+
+      var successCount = 0;
+      var errorCount = 0;
+      var useBatch = true;
+
+      // Build ID-to-listItem lookup
+      var listLookup = {};
+      for (var li = 0; li < filtered.length; li++) {
+        listLookup[filtered[li].id] = filtered[li];
+      }
+
+      // ---- TRY BATCH MODE FIRST (regular conversations only) ----
+      if (regularConvos.length > 0) {
+      log("Using batch download (10 at a time)\u2026");
+      var dlMode = document.getElementById("g2c-dl-mode");
+      if (dlMode) dlMode.textContent = "\u26A1 Batch mode \u2014 10x faster";
+
+      var batchIndex = 0;
+      var consecutiveGroupFails = 0;
+      var MAX_CONSECUTIVE_FAILS = 3;
+
+      // Helper: download a list of IDs individually, return results
+      async function downloadIndividually(items, tkn) {
+        var results = [];
+        for (var ii = 0; ii < items.length; ii++) {
+          try {
+            var resp = await downloadSingle(items[ii].id, tkn);
+            if (resp.status === 429) {
+              log("Rate limited, waiting 30s\u2026", "error");
+              await new Promise(function(r) { setTimeout(r, 30000); });
+              ii--; continue;
+            }
+            if (resp.status !== 200) {
+              results.push({error: "HTTP " + resp.status, item: items[ii]});
+              continue;
+            }
+            var det = await resp.json();
+            results.push({detail: det, item: items[ii]});
+          } catch (e) {
+            results.push({error: e.message, item: items[ii]});
+          }
+          await new Promise(function(r) { setTimeout(r, 500); });
+        }
+        return results;
+      }
+
+      // Helper: try a batch, return {ok, data, status}
+      async function tryBatch(ids, tkn) {
+        try {
+          var resp = await downloadBatch(ids, tkn);
+          if (resp.status === 200) {
+            var d = await resp.json();
+            return {ok: true, data: d, status: 200};
+          }
+          return {ok: false, data: null, status: resp.status};
+        } catch (e) {
+          return {ok: false, data: null, status: 0, error: e.message};
+        }
+      }
+
+      while (batchIndex < regularConvos.length && useBatch) {
+        var batchItems = regularConvos.slice(batchIndex, batchIndex + BATCH_SIZE);
+        var batchIds = [];
+        for (var bi = 0; bi < batchItems.length; bi++) batchIds.push(batchItems[bi].id);
+
+        // --- Attempt 1: full batch ---
+        var result = await tryBatch(batchIds, token);
+
+        if (result.status === 429) {
+          log("Rate limited, waiting 30s\u2026", "error");
+          var dlTitle = document.getElementById("g2c-dl-title");
+          var dlRemaining = document.getElementById("g2c-dl-remaining");
+          if (dlTitle) dlTitle.textContent = "Rate limited \u2014 waiting 30s\u2026";
+          if (dlRemaining) dlRemaining.textContent = "Will resume automatically";
+          await new Promise(function(r) { setTimeout(r, 30000); });
+          continue; // retry same batch
+        }
+
+        if (result.status === 422 || result.status === 405 || result.status === 404) {
+          log("Batch endpoint unavailable (HTTP " + result.status + "), falling back to individual downloads\u2026", "error");
+          useBatch = false;
+          break;
+        }
+
+        if (result.ok) {
+          // Success — process batch
+          consecutiveGroupFails = 0;
+          var batchData = result.data;
+          var batchArr = Array.isArray(batchData) ? batchData : Object.values(batchData);
+
+          for (var bj = 0; bj < batchArr.length; bj++) {
+            try {
+              var detail = batchArr[bj];
+              var detailId = detail.conversation_id || detail.id;
+              var listItem = listLookup[detailId] || batchItems[bj];
+              var processed = processConversationDetail(detail, listItem);
+              fullExport.conversations.push(processed);
+              successCount++;
+            } catch (procErr) {
+              var errTitle = (batchItems[bj] && batchItems[bj].title) || "Unknown";
+              log("Error processing: " + errTitle + " \u2014 " + procErr.message, "error");
+              errorCount++;
+              fullExport.conversations.push({
+                id: batchIds[bj],
+                title: errTitle,
+                error: procErr.message
+              });
+            }
+          }
+
+          batchIndex += BATCH_SIZE;
+          await new Promise(function(r) { setTimeout(r, 500); });
+
+        } else {
+          // --- Batch failed (likely 500) — graduated retry ---
+          log("Batch error (HTTP " + (result.status || result.error) + "), retrying in 3s\u2026", "error");
+          if (dlMode) dlMode.textContent = "\u26A1 Retrying batch\u2026";
+          await new Promise(function(r) { setTimeout(r, 3000); });
+
+          // --- Attempt 2: retry same batch ---
+          var retry = await tryBatch(batchIds, token);
+
+          if (retry.ok) {
+            consecutiveGroupFails = 0;
+            var retryArr = Array.isArray(retry.data) ? retry.data : Object.values(retry.data);
+            for (var rj = 0; rj < retryArr.length; rj++) {
+              try {
+                var det = retryArr[rj];
+                var detId = det.conversation_id || det.id;
+                var li = listLookup[detId] || batchItems[rj];
+                fullExport.conversations.push(processConversationDetail(det, li));
+                successCount++;
+              } catch (e) {
+                errorCount++;
+                fullExport.conversations.push({id: batchIds[rj], title: (batchItems[rj] && batchItems[rj].title) || "Unknown", error: e.message});
+              }
+            }
+            batchIndex += BATCH_SIZE;
+            await new Promise(function(r) { setTimeout(r, 500); });
+
+          } else if (batchIds.length > 1) {
+            // --- Attempt 3: split batch in half ---
+            log("Retry failed, splitting batch\u2026", "error");
+            if (dlMode) dlMode.textContent = "\u26A1 Splitting batch\u2026";
+            var mid = Math.ceil(batchIds.length / 2);
+            var halfA = batchIds.slice(0, mid);
+            var halfB = batchIds.slice(mid);
+            var itemsA = batchItems.slice(0, mid);
+            var itemsB = batchItems.slice(mid);
+
+            var anyHalfFailed = false;
+            var halves = [{ids: halfA, items: itemsA}, {ids: halfB, items: itemsB}];
+
+            for (var hi = 0; hi < halves.length; hi++) {
+              var halfResult = await tryBatch(halves[hi].ids, token);
+              if (halfResult.ok) {
+                var halfArr = Array.isArray(halfResult.data) ? halfResult.data : Object.values(halfResult.data);
+                for (var hj = 0; hj < halfArr.length; hj++) {
+                  try {
+                    var hDet = halfArr[hj];
+                    var hId = hDet.conversation_id || hDet.id;
+                    var hLi = listLookup[hId] || halves[hi].items[hj];
+                    fullExport.conversations.push(processConversationDetail(hDet, hLi));
+                    successCount++;
+                  } catch (e) {
+                    errorCount++;
+                    fullExport.conversations.push({id: halves[hi].ids[hj], title: (halves[hi].items[hj] && halves[hi].items[hj].title) || "Unknown", error: e.message});
+                  }
+                }
+              } else {
+                // Half batch also failed — download individually
+                anyHalfFailed = true;
+                log("Half-batch failed, downloading " + halves[hi].ids.length + " individually\u2026", "error");
+                var indResults = await downloadIndividually(halves[hi].items, token);
+                for (var ir = 0; ir < indResults.length; ir++) {
+                  if (indResults[ir].detail) {
+                    try {
+                      fullExport.conversations.push(processConversationDetail(indResults[ir].detail, indResults[ir].item));
+                      successCount++;
+                    } catch (e) {
+                      errorCount++;
+                      fullExport.conversations.push({id: indResults[ir].item.id, title: indResults[ir].item.title || "Unknown", error: e.message});
+                    }
+                  } else {
+                    errorCount++;
+                    fullExport.conversations.push({id: indResults[ir].item.id, title: indResults[ir].item.title || "Unknown", error: indResults[ir].error});
+                  }
+                }
+              }
+              await new Promise(function(r) { setTimeout(r, 500); });
+            }
+
+            if (anyHalfFailed) {
+              consecutiveGroupFails++;
+              log("Batch group recovered individually, resuming batch mode (" + consecutiveGroupFails + "/" + MAX_CONSECUTIVE_FAILS + " fails)", "error");
+            } else {
+              consecutiveGroupFails = 0;
+            }
+
+            batchIndex += BATCH_SIZE;
+
+          } else {
+            // Single item batch failed — download individually
+            var singleResults = await downloadIndividually(batchItems, token);
+            for (var sr = 0; sr < singleResults.length; sr++) {
+              if (singleResults[sr].detail) {
+                try {
+                  fullExport.conversations.push(processConversationDetail(singleResults[sr].detail, singleResults[sr].item));
+                  successCount++;
+                } catch (e) {
+                  errorCount++;
+                  fullExport.conversations.push({id: singleResults[sr].item.id, title: singleResults[sr].item.title || "Unknown", error: e.message});
+                }
+              } else {
+                errorCount++;
+                fullExport.conversations.push({id: singleResults[sr].item.id, title: singleResults[sr].item.title || "Unknown", error: singleResults[sr].error});
+              }
+            }
+            consecutiveGroupFails++;
+            batchIndex += BATCH_SIZE;
+          }
+
+          // Check if we should permanently give up on batch mode
+          if (consecutiveGroupFails >= MAX_CONSECUTIVE_FAILS) {
+            log("Too many consecutive batch failures (" + MAX_CONSECUTIVE_FAILS + "), switching to individual mode", "error");
+            useBatch = false;
+          } else if (consecutiveGroupFails > 0) {
+            if (dlMode) dlMode.textContent = "\u26A1 Batch mode \u2014 resumed";
+          }
+        }
+
+        // Update UI after each group
+        var completed = successCount + errorCount;
+        var lastTitle = batchItems[batchItems.length - 1].title || "Untitled";
+        updateDlUI(completed, filtered.length, lastTitle, startTime);
+
+        if (completed % 100 === 0 || completed === filtered.length) {
+          log("Progress: " + completed + "/" + filtered.length);
+        }
+      }
+
+      // ---- FALLBACK: INDIVIDUAL DOWNLOADS ----
+      if (!useBatch) {
+        if (dlMode) dlMode.textContent = "\uD83D\uDC22 Individual mode";
+        log("Switching to individual downloads\u2026");
+
+        // Start from where batch left off
+        var startFrom = successCount + errorCount;
+        for (var i = startFrom; i < regularConvos.length; i++) {
+          var c = regularConvos[i];
+          var title = c.title || "Untitled";
+
+          updateDlUI(i + 1, filtered.length, title, startTime);
+
+          try {
+            var convoResp = await downloadSingle(c.id, token);
+
+            if (convoResp.status === 429) {
+              log("Rate limited, waiting 30s\u2026", "error");
+              var dlTitle = document.getElementById("g2c-dl-title");
+              var dlRemaining = document.getElementById("g2c-dl-remaining");
+              if (dlTitle) dlTitle.textContent = "Rate limited \u2014 waiting 30s\u2026";
+              if (dlRemaining) dlRemaining.textContent = "Will resume automatically";
+              await new Promise(function(r) { setTimeout(r, 30000); });
+              i--;
+              continue;
+            }
+
+            if (convoResp.status !== 200) {
+              log("Skipped: " + title + " (HTTP " + convoResp.status + ")", "error");
+              errorCount++;
+              fullExport.conversations.push({id: c.id, title: title, error: "HTTP " + convoResp.status});
+              continue;
+            }
+
+            var detail = await convoResp.json();
+            var processed = processConversationDetail(detail, c);
+            fullExport.conversations.push(processed);
+            successCount++;
+
+            if (i % 25 === 0 && i > 0) {
+              log("Progress: " + (i + 1) + "/" + filtered.length);
+            }
+
+          } catch (err) {
+            log("Error: " + title + " \u2014 " + err.message, "error");
+            errorCount++;
+            fullExport.conversations.push({id: c.id, title: title, error: err.message});
+          }
+
+          await new Promise(function(r) { setTimeout(r, 1000); });
+        }
+      }
+      } // end if (regularConvos.length > 0)
+
+      // ---- TRUNCATION DETECTION & RECOVERY ----
+      // Batch endpoint intermittently returns incomplete mapping trees.
+      // Detect suspected truncation and re-fetch via single endpoint.
+      var truncationSuspects = [];
+      for (var ti = 0; ti < fullExport.conversations.length; ti++) {
+        var conv = fullExport.conversations[ti];
+        if (conv.error) continue; // skip failed downloads
+        if (!conv._mapping_node_count) continue; // no mapping data to judge
+
+        var ageSeconds = 0;
+        if (conv.create_time && conv.update_time) {
+          ageSeconds = conv.update_time - conv.create_time;
+        }
+        var ageDays = ageSeconds / 86400;
+
+        // Heuristic: flag conversations with suspiciously few nodes for their lifespan
+        var suspect = false;
+        if (conv.message_count === 0 && conv._mapping_node_count > 0) {
+          suspect = true; // has nodes but zero extractable messages
+        } else if (ageDays > 30 && conv._mapping_node_count < 40) {
+          suspect = true; // month+ conversation with very small tree
+        } else if (ageDays > 7 && conv._mapping_node_count < 20) {
+          suspect = true; // week+ conversation with tiny tree
+        } else if (ageDays > 1 && conv.message_count < 4) {
+          suspect = true; // multi-day conversation with almost no messages
+        }
+
+        if (suspect) {
+          truncationSuspects.push({index: ti, conv: conv});
+        }
+      }
+
+      if (truncationSuspects.length > 0) {
+        log("Truncation check: " + truncationSuspects.length + " conversation(s) flagged, re-fetching\u2026");
+        var dlMode = document.getElementById("g2c-dl-mode");
+        if (dlMode) dlMode.textContent = "\uD83D\uDD0D Verifying truncated conversations\u2026";
+
+        var recovered = 0;
+        var verified = 0;
+        for (var ts = 0; ts < truncationSuspects.length; ts++) {
+          var sus = truncationSuspects[ts];
+          try {
+            var singleResp = await downloadSingle(sus.conv.id, token);
+            if (singleResp.status === 429) {
+              log("Rate limited during truncation check, waiting 30s\u2026", "error");
+              await new Promise(function(r) { setTimeout(r, 30000); });
+              ts--; continue;
+            }
+            if (singleResp.status !== 200) continue;
+
+            var singleDetail = await singleResp.json();
+            var singleNodeCount = singleDetail.mapping ? Object.keys(singleDetail.mapping).length : 0;
+
+            if (singleNodeCount > sus.conv._mapping_node_count) {
+              // Single endpoint returned more data — use it
+              var listItem = listLookup[sus.conv.id] || null;
+              var reprocessed = processConversationDetail(singleDetail, listItem);
+              // Preserve metadata from original
+              reprocessed.project = sus.conv.project;
+              reprocessed.project_id = sus.conv.project_id;
+              reprocessed.archived = sus.conv.archived;
+              reprocessed._truncation_recovered = true;
+              reprocessed._batch_node_count = sus.conv._mapping_node_count;
+              reprocessed._batch_message_count = sus.conv.message_count;
+
+              fullExport.conversations[sus.index] = reprocessed;
+              recovered++;
+              log("Recovered: " + sus.conv.title + " (" + sus.conv.message_count + " \u2192 " + reprocessed.message_count + " messages)");
+            } else {
+              verified++;
+            }
+          } catch (e) {
+            log("Re-fetch failed: " + sus.conv.title + " \u2014 " + e.message, "error");
+          }
+          await new Promise(function(r) { setTimeout(r, 500); });
+        }
+
+        if (recovered > 0) {
+          log("Truncation recovery: " + recovered + " conversation(s) recovered, " + verified + " verified OK");
+        } else {
+          log("Truncation check: all " + truncationSuspects.length + " verified OK");
+        }
+        if (dlMode) dlMode.textContent = "";
+      }
+
+      // ---- DOWNLOAD SHARED CONVERSATIONS ----
+      if (sharedConvos.length > 0) {
+        log("Downloading " + sharedConvos.length + " shared conversation(s)\u2026");
+        var dlMode = document.getElementById("g2c-dl-mode");
+        if (dlMode) dlMode.textContent = "\uD83D\uDD17 Shared conversations";
+
+        for (var si = 0; si < sharedConvos.length; si++) {
+          var sc = sharedConvos[si];
+          var shareId = sc._share_id;
+          var scTitle = sc.title || "Shared conversation";
+
+          var completed = successCount + errorCount;
+          updateDlUI(completed + 1, filtered.length, scTitle, startTime);
+
+          try {
+            var sharedResp = await downloadShared(shareId, token);
+
+            if (sharedResp.status === 429) {
+              log("Rate limited, waiting 30s\u2026", "error");
+              await new Promise(function(r) { setTimeout(r, 30000); });
+              si--; continue;
+            }
+
+            if (sharedResp.status !== 200) {
+              log("Skipped shared: " + scTitle + " (HTTP " + sharedResp.status + ")", "error");
+              errorCount++;
+              fullExport.conversations.push({id: sc.id, title: scTitle, shared: true, error: "HTTP " + sharedResp.status});
+              continue;
+            }
+
+            var sharedDetail = await sharedResp.json();
+            var processed = processConversationDetail(sharedDetail, sc);
+            processed.shared = true;
+            processed.share_id = shareId;
+            fullExport.conversations.push(processed);
+            successCount++;
+
+          } catch (sharedErr) {
+            log("Error shared: " + scTitle + " \u2014 " + sharedErr.message, "error");
+            errorCount++;
+            fullExport.conversations.push({id: sc.id, title: scTitle, shared: true, error: sharedErr.message});
+          }
+
+          await new Promise(function(r) { setTimeout(r, 1000); });
+        }
+      }
+
+      var json = JSON.stringify(fullExport, null, 2);
+      var sizeBytes = json.length;
+      var sizeStr = sizeBytes < 1024 * 1024
+        ? (sizeBytes / 1024).toFixed(0) + " KB"
+        : (sizeBytes / 1024 / 1024).toFixed(1) + " MB";
+
+      // Smart filename based on what was exported
+      var exportFilename = "chatgpt_all_conversations.json";
+      var projectNames = {};
+      var hasMain = false;
+      var hasShared = false;
+      var hasArchived = false;
+      for (var fi = 0; fi < fullExport.conversations.length; fi++) {
+        if (fullExport.conversations[fi].shared) {
+          hasShared = true;
+        } else if (fullExport.conversations[fi].archived) {
+          hasArchived = true;
+        } else if (fullExport.conversations[fi].project) {
+          projectNames[fullExport.conversations[fi].project] = true;
+        } else {
+          hasMain = true;
+        }
+      }
+      var projNameList = Object.keys(projectNames);
+      if (!hasMain && !hasShared && !hasArchived && projNameList.length === 1) {
+        // Only one project exported
+        exportFilename = "chatgpt_project_" + projNameList[0].toLowerCase().replace(/[^a-z0-9]+/g, "_") + ".json";
+      } else if (!hasMain && !hasShared && !hasArchived && projNameList.length > 1) {
+        exportFilename = "chatgpt_projects.json";
+      } else if (!hasMain && hasShared && !hasArchived && projNameList.length === 0) {
+        exportFilename = "chatgpt_shared_conversations.json";
+      } else if (!hasMain && !hasShared && hasArchived && projNameList.length === 0) {
+        exportFilename = "chatgpt_archived_conversations.json";
+      }
+      downloadFile(json, exportFilename, "application/json");
+
+      // Count truncation recoveries
+      var recoveredCount = 0;
+      for (var rc = 0; rc < fullExport.conversations.length; rc++) {
+        if (fullExport.conversations[rc]._truncation_recovered) recoveredCount++;
+      }
+
+      var doneMsg = "DONE! " + successCount + " conversations, " + errorCount + " errors, ~" + sizeStr;
+      if (recoveredCount > 0) doneMsg += " (" + recoveredCount + " recovered from truncation)";
+      log(doneMsg, "success");
+
+      // Collect model breakdown from export
+      var modelBreakdown = {};
+      for (var mi = 0; mi < fullExport.conversations.length; mi++) {
+        var cm = fullExport.conversations[mi].model || "unknown";
+        modelBreakdown[cm] = (modelBreakdown[cm] || 0) + 1;
+      }
+      var sortedModels = Object.keys(modelBreakdown).sort(function(a, b) {
+        return modelBreakdown[b] - modelBreakdown[a];
+      });
+
+      // Build model tags HTML — top 5 visible, rest collapsed
+      var TOP_N = 5;
+      var modelTagsHtml = '<div class="g2c-complete-models-wrap">';
+      for (var ti = 0; ti < Math.min(TOP_N, sortedModels.length); ti++) {
+        var mk = sortedModels[ti];
+        modelTagsHtml += '<span class="g2c-scan-tag">' + mk + ' <span style="opacity:0.6;">' + modelBreakdown[mk] + '</span></span>';
+      }
+      if (sortedModels.length > TOP_N) {
+        var moreCount = sortedModels.length - TOP_N;
+        modelTagsHtml += '<button class="g2c-models-toggle" id="g2c-models-toggle">+' + moreCount + ' more</button>';
+        modelTagsHtml += '<div class="g2c-models-extra" id="g2c-models-extra" style="display:none;">';
+        for (var ti = TOP_N; ti < sortedModels.length; ti++) {
+          var mk = sortedModels[ti];
+          modelTagsHtml += '<span class="g2c-scan-tag">' + mk + ' <span style="opacity:0.6;">' + modelBreakdown[mk] + '</span></span>';
+        }
+        modelTagsHtml += '</div>';
+      }
+      modelTagsHtml += '</div>';
+
+      // Show completion screen (State 5)
+      var filterPanel = document.getElementById("g2c-filter-panel");
+      if (filterPanel) {
+        var elapsed = Math.round((Date.now() - startTime) / 1000);
+        var elapsedStr = elapsed < 60 ? elapsed + "s" : Math.round(elapsed / 60) + "m " + (elapsed % 60) + "s";
+
+        filterPanel.innerHTML = '\
+          <div class="g2c-complete">\
+            <div class="g2c-complete-icon">\u2705</div>\
+            <div class="g2c-complete-title">Export Complete!</div>\
+            <div class="g2c-complete-sub">' + successCount + ' conversations \u00B7 ' + sizeStr + ' \u00B7 ' + elapsedStr + '</div>\
+            ' + (recoveredCount > 0 ? '<div class="g2c-complete-sub" style="color:#a0e0a0;">\uD83D\uDD0D ' + recoveredCount + ' conversation(s) recovered from batch truncation</div>' : '') + '\
+            ' + modelTagsHtml + '\
+          </div>\
+          <div class="g2c-whatsnext">\
+            <div class="g2c-whatsnext-title">What\u2019s next?</div>\
+            <div class="g2c-whatsnext-item">\
+              <span style="color:#a0a0e0;">\uD83D\uDC40 Browse your data</span><br>\
+              <span style="color:#999;">Open the <a href="https://siamsnus.github.io/GPT2Claude-Migration-Kit/viewer.html" target="_blank">Conversation Viewer</a> to explore your chats. You can <a href="https://siamsnus.github.io/GPT2Claude-Migration-Kit/viewer.html" download target="_blank">download it</a> for fully offline use.</span>\
+            </div>\
+            <div class="g2c-whatsnext-item">\
+              <span style="color:#7eb8a0;">\uD83D\uDE80 Import to Claude</span> <span class="g2c-whatsnext-badge">recommended</span><br>\
+              <span style="color:#999;">Follow the <a href="https://siamsnus.github.io/GPT2Claude-Migration-Kit/#importing" target="_blank">import guide</a> to bring your history into Claude.</span>\
+            </div>\
+          </div>';
+
+        // Wire up "show more models" toggle
+        var modelsToggle = document.getElementById("g2c-models-toggle");
+        if (modelsToggle) {
+          modelsToggle.addEventListener("click", function() {
+            var extra = document.getElementById("g2c-models-extra");
+            if (extra) {
+              var showing = extra.style.display !== "none";
+              extra.style.display = showing ? "none" : "flex";
+              this.textContent = showing ? "+" + (sortedModels.length - TOP_N) + " more" : "show less";
+            }
+          });
+        }
+      }
+
+    } catch (err) {
+      log("Download failed: " + err.message, "error");
+      var dlTitle = document.getElementById("g2c-dl-title");
+      if (dlTitle) dlTitle.textContent = "Error: " + err.message;
+    }
+  }
+
+  // ========== EXPORT: INSTRUCTIONS ==========
+  async function exportInstructions() {
+    var btn = document.getElementById("g2c-btn-instructions");
+    setButtonState(btn, "running", "Exporting...");
+
+    try {
+      var token = await getToken();
+      var headers = {"Authorization": "Bearer " + token};
+
+      var endpoints = [
+        {name: "custom_instructions", url: "https://chatgpt.com/backend-api/user_system_messages"},
+        {name: "settings", url: "https://chatgpt.com/backend-api/settings"},
+        {name: "beta_features", url: "https://chatgpt.com/backend-api/settings/beta_features"},
+        {name: "models", url: "https://chatgpt.com/backend-api/models"},
+        {name: "account", url: "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27"},
+        {name: "codex_usage", url: "https://chatgpt.com/backend-api/codex/usage"},
+        {name: "compliance", url: "https://chatgpt.com/backend-api/compliance"}
+      ];
+
+      var result = {
+        export_date: new Date().toISOString(),
+        tool: "GPT2Claude Migration Kit v2.7",
+        data: {}
+      };
+
+      for (var i = 0; i < endpoints.length; i++) {
+        var ep = endpoints[i];
+        log("Fetching " + ep.name + "...");
+        try {
+          var resp = await fetch(ep.url, {credentials: "include", headers: headers});
+          if (resp.status === 200) {
+            result.data[ep.name] = await resp.json();
+            log("Got: " + ep.name);
+          } else if (resp.status === 404) {
+            result.data[ep.name] = {note: "Not available on this account"};
+            log(ep.name + ": not available (skipped)");
+          } else {
+            result.data[ep.name] = {error: "HTTP " + resp.status};
+            log(ep.name + ": HTTP " + resp.status, "error");
+          }
+        } catch (e) {
+          result.data[ep.name] = {error: e.message};
+          log(ep.name + " error: " + e.message, "error");
+        }
+      }
+
+      downloadFile(JSON.stringify(result, null, 2), "chatgpt_instructions.json", "application/json");
+      setButtonState(btn, "done", "Instructions exported");
+
+    } catch (err) {
+      log("Instructions export failed: " + err.message, "error");
+      setButtonState(btn, "error", err.message);
+    }
+  }
+
+  // ========== EVENT LISTENERS ==========
+  document.getElementById("g2c-close").addEventListener("click", function() {
+    panel.style.animation = "g2c-fadein 0.2s ease-out reverse";
+    setTimeout(function() { panel.remove(); style.remove(); }, 200);
+  });
+
+  document.getElementById("g2c-btn-memory").addEventListener("click", exportMemories);
+  document.getElementById("g2c-btn-convos").addEventListener("click", exportConversations);
+  document.getElementById("g2c-btn-instructions").addEventListener("click", exportInstructions);
+
+  document.getElementById("g2c-btn-all").addEventListener("click", async function() {
+    var btn = document.getElementById("g2c-btn-all");
+    setButtonState(btn, "running", "Exporting everything...");
+    log("--- EXPORT ALL started ---");
+    await exportMemories();
+    await exportInstructions();
+    log("Memories & instructions done. Scanning conversations...");
+    await exportConversations();
+    log("Memories & instructions exported. Configure conversation filters and click Download.", "success");
+  });
+
+  document.getElementById("g2c-toggle-log").addEventListener("click", function() {
+    var logVisible = logEl.classList.contains("visible");
+    logEl.classList.toggle("visible");
+    this.textContent = logVisible ? "Show log \u25BC" : "Hide log \u25B2";
+  });
+
+  // Copy log button
+  document.getElementById("g2c-copy-log").addEventListener("click", function() {
+    var copyBtn = this;
+    var entries = document.querySelectorAll(".g2c-log-entry");
+    var text = "";
+    for (var i = 0; i < entries.length; i++) {
+      text += entries[i].textContent + "\n";
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        copyBtn.textContent = "\u2705 Copied!";
+        setTimeout(function() { copyBtn.textContent = "Copy log"; }, 2000);
+      }).catch(function() {
+        fallbackCopy(text, copyBtn);
+      });
+    } else {
+      fallbackCopy(text, copyBtn);
+    }
+  });
+
+  function fallbackCopy(text, btn) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      btn.textContent = "\u2705 Copied!";
+      setTimeout(function() { btn.textContent = "Copy log"; }, 2000);
+    } catch (e) {
+      btn.textContent = "Copy failed";
+      setTimeout(function() { btn.textContent = "Copy log"; }, 2000);
+    }
+    document.body.removeChild(ta);
+  }
+
+  log("Ready. Click a button to start exporting.");
+
+  // ========== CAMERA TOGGLE ==========
+  var cameraState = null; // null=unknown, true=on, false=off
+  async function toggleCamera() {
+    var btn = document.getElementById("g2c-camera-btn");
+    var note = document.getElementById("g2c-camera-note");
+    if (!btn) return;
+
+    btn.className = "g2c-tool-toggle checking";
+    btn.textContent = "\u2026";
+
+    try {
+      var token = await getToken();
+      var headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"};
+
+      // If we don't know current state, check first
+      if (cameraState === null) {
+        var checkResp = await fetch("https://chatgpt.com/backend-api/settings/beta_features", {
+          credentials: "include", headers: headers
+        });
+        if (checkResp.status === 200) {
+          var features = await checkResp.json();
+          cameraState = !!(features.video_screen_sharing);
+          log("Camera currently: " + (cameraState ? "ON" : "OFF"));
+        } else {
+          cameraState = false;
+          log("Beta features: HTTP " + checkResp.status + " (assuming off)");
+        }
+      }
+
+      // Toggle to opposite state
+      var newState = !cameraState;
+      var toggleResp = await fetch(
+        "https://chatgpt.com/backend-api/settings/beta_features?feature=video_screen_sharing&value=" + newState,
+        {method: "POST", credentials: "include", headers: headers}
+      );
+
+      if (toggleResp.status === 200) {
+        cameraState = newState;
+        btn.className = "g2c-tool-toggle" + (newState ? " on" : "");
+        btn.textContent = newState ? "ON" : "OFF";
+        log("Camera " + (newState ? "enabled" : "disabled"), "success");
+
+        if (note) {
+          note.style.display = "block";
+          note.textContent = newState
+            ? "\u2705 Enabled! Refresh the page (F5) to see the camera icon"
+            : "Disabled. Refresh the page to remove the camera icon";
+          setTimeout(function() {
+            if (note) note.style.display = "none";
+          }, 8000);
+        }
+      } else {
+        throw new Error("HTTP " + toggleResp.status);
+      }
+    } catch (err) {
+      btn.className = "g2c-tool-toggle";
+      btn.textContent = "Error";
+      log("Camera toggle failed: " + err.message, "error");
+      setTimeout(function() {
+        if (btn) btn.textContent = "Retry";
+      }, 2000);
+    }
+  }
+
+  // Auto-check camera state on load
+  (async function() {
+    try {
+      var btn = document.getElementById("g2c-camera-btn");
+      if (!btn) return;
+      var token = await getToken();
+      var headers = {"Authorization": "Bearer " + token};
+      var resp = await fetch("https://chatgpt.com/backend-api/settings/beta_features", {
+        credentials: "include", headers: headers
+      });
+      if (resp.status === 200) {
+        var features = await resp.json();
+        cameraState = !!(features.video_screen_sharing);
+        btn.className = "g2c-tool-toggle" + (cameraState ? " on" : "");
+        btn.textContent = cameraState ? "ON" : "OFF";
+      }
+    } catch (e) {
+      // silent — user can click to check manually
+    }
+  })();
+
+  safeAddEvent("g2c-camera-btn", "click", toggleCamera);
+})();
+</file>
+
+<file path="project_diagnostic.js">
+// GPT2Claude Project Diagnostic — paste in browser console on chatgpt.com
+// This only reads data, changes nothing, sends nothing anywhere
+
+(async function() {
+  console.log("=== GPT2Claude Project Diagnostic ===\n");
+  
+  var session = await (await fetch("https://chatgpt.com/api/auth/session", {credentials: "include"})).json();
+  var token = session.accessToken;
+  var h = {"Authorization": "Bearer " + token};
+  
+  // 1. Account type
+  console.log("--- ACCOUNT ---");
+  try {
+    var acct = await (await fetch("https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27", {credentials: "include", headers: h})).json();
+    var accounts = acct.accounts || {};
+    var ids = Object.keys(accounts).filter(function(k) { return k !== "default"; });
+    if (ids.length > 0) {
+      var primary = accounts[ids[0]].account || {};
+      console.log("Plan: " + (primary.plan_type || "unknown"));
+      console.log("Structure: " + (primary.structure || "unknown"));
+      console.log("Workspace: " + (primary.workspace_type || "none"));
+      console.log("Org ID: " + (primary.organization_id || "none"));
+    }
+  } catch(e) { console.log("Account check failed: " + e.message); }
+  
+  // 2. Projects API endpoint
+  console.log("\n--- PROJECT ENDPOINTS ---");
+  try {
+    var r1 = await fetch("https://chatgpt.com/backend-api/projects", {credentials: "include", headers: h});
+    console.log("/projects: HTTP " + r1.status);
+    if (r1.status === 200) {
+      var d1 = await r1.json();
+      var keys1 = Array.isArray(d1) ? "array[" + d1.length + "]" : Object.keys(d1).join(", ");
+      console.log("  Structure: " + keys1);
+    }
+  } catch(e) { console.log("/projects error: " + e.message); }
+  
+  try {
+    var r2 = await fetch("https://chatgpt.com/backend-api/gizmos/discovery/mine", {credentials: "include", headers: h});
+    console.log("/gizmos/discovery/mine: HTTP " + r2.status);
+    if (r2.status === 200) {
+      var d2 = await r2.json();
+      var keys2 = Array.isArray(d2) ? "array[" + d2.length + "]" : Object.keys(d2).join(", ");
+      console.log("  Structure: " + keys2);
+    }
+  } catch(e) { console.log("/gizmos/discovery/mine error: " + e.message); }
+
+  // 3. DOM scrape for project links
+  console.log("\n--- DOM PROJECT LINKS ---");
+  var links = document.querySelectorAll('a[href*="/g/g-p-"]');
+  if (links.length > 0) {
+    for (var i = 0; i < links.length; i++) {
+      var href = links[i].getAttribute("href");
+      var match = href.match(/g-p-[a-f0-9]+/);
+      console.log("  Found: " + (match ? match[0] : "unknown-id"));
+    }
+  } else {
+    console.log("  No project links found in sidebar DOM");
+    console.log("  (Make sure at least one project is visible in the sidebar)");
+  }
+  
+  // 4. Check first 5 conversations for gizmo_id
+  console.log("\n--- CONVERSATION GIZMO_ID CHECK ---");
+  try {
+    var convos = await (await fetch("https://chatgpt.com/backend-api/conversations?limit=5&offset=0", {credentials: "include", headers: h})).json();
+    var items = convos.items || [];
+    console.log("Conversations returned: " + items.length);
+    for (var j = 0; j < items.length; j++) {
+      var c = items[j];
+      console.log("  Convo " + (j+1) + ": gizmo_id=" + (c.gizmo_id || "null") + " workspace_id=" + (c.workspace_id || "null"));
+    }
+  } catch(e) { console.log("Conversations check failed: " + e.message); }
+  
+  // 5. If we found project IDs, try fetching their conversations
+  console.log("\n--- PROJECT CONVERSATION TEST ---");
+  var projectIds = [];
+  // From DOM
+  var domLinks = document.querySelectorAll('a[href*="/g/g-p-"]');
+  for (var k = 0; k < domLinks.length; k++) {
+    var m = domLinks[k].getAttribute("href").match(/g-p-[a-f0-9]+/);
+    if (m) projectIds.push(m[0]);
+  }
+  // From conversation gizmo_ids
+  if (items) {
+    for (var l = 0; l < items.length; l++) {
+      if (items[l].gizmo_id && items[l].gizmo_id.startsWith("g-p-") && projectIds.indexOf(items[l].gizmo_id) === -1) {
+        projectIds.push(items[l].gizmo_id);
+      }
+    }
+  }
+  
+  if (projectIds.length > 0) {
+    for (var p = 0; p < projectIds.length; p++) {
+      try {
+        var pr = await fetch("https://chatgpt.com/backend-api/gizmos/" + projectIds[p] + "/conversations?cursor=0", {credentials: "include", headers: h});
+        console.log("  " + projectIds[p] + ": HTTP " + pr.status);
+        if (pr.status === 200) {
+          var pd = await pr.json();
+          console.log("    Items: " + (pd.items ? pd.items.length : 0) + ", Cursor: " + pd.cursor);
+        }
+      } catch(e) { console.log("  " + projectIds[p] + " error: " + e.message); }
+    }
+  } else {
+    console.log("  No project IDs found to test");
+    console.log("  (If you have projects, expand one in the sidebar and re-run)");
+  }
+
+  console.log("\n=== DIAGNOSTIC COMPLETE ===");
+  console.log("Copy everything above and share it (no personal data is included)");
+})();
+</file>
+
+<file path="viewer.html">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChatGPT Export Viewer — Browse your conversations, memories &amp; settings</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0e; --sidebar: #111114; --chat-bg: #16161a;
+    --surface: #1c1c21; --surface2: #222228; --border: #2a2a32;
+    --text: #e2e2e8; --text-dim: #8888a0; --text-faint: #55556a;
+    --accent: #d4a574; --accent-dim: rgba(212,165,116,0.12);
+    --gpt: #9898d4; --gpt-dim: rgba(152,152,212,0.10);
+    --user-bubble: #2a2a3a; --ai-bubble: #1e1e26;
+    --green: #7eb8a0; --red: #d47474;
+    --mono: 'IBM Plex Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
+    --sidebar-w: 340px;
+  }
+
+  /* ===== TABS ===== */
+  .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--sidebar); }
+  .tab-btn { flex: 1; padding: 10px 6px; font-family: var(--sans); font-size: 0.78rem; font-weight: 600; color: var(--text-faint); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.15s; text-align: center; }
+  .tab-btn:hover { color: var(--text-dim); background: var(--surface); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn .tab-icon { font-size: 1rem; display: block; margin-bottom: 2px; }
+  .tab-btn .tab-badge { display: inline-block; font-size: 0.65rem; color: var(--text-faint); font-family: var(--mono); margin-left: 2px; }
+  .tab-btn.empty { opacity: 0.4; }
+  .tab-panel { display: none; flex-direction: column; flex: 1; min-height: 0; }
+  .tab-panel.active { display: flex; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); }
+
+  /* ===== LAYOUT ===== */
+  .app { display: flex; height: 100vh; }
+  .sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  /* ===== DROP ZONE (initial state) ===== */
+  .drop-zone { flex: 1; display: flex; align-items: center; justify-content: center; padding: 3rem; }
+  .drop-zone-inner { text-align: center; max-width: 480px; }
+  .drop-zone-inner .icon { font-size: 4rem; margin-bottom: 1.5rem; opacity: 0.6; }
+  .drop-zone-inner h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
+  .drop-zone-inner p { color: var(--text-dim); font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem; }
+  .drop-zone-inner .or { color: var(--text-faint); font-size: 0.82rem; margin: 1rem 0; }
+  .file-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 28px; background: var(--accent); color: var(--bg); border: none; border-radius: 10px; font-family: var(--sans); font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .file-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+  .drop-zone.dragover .drop-zone-inner { outline: 2px dashed var(--accent); outline-offset: 20px; border-radius: 20px; }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar-header { padding: 18px 20px 12px; border-bottom: 1px solid var(--border); }
+  .sidebar-header h2 { font-size: 0.82rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .search-box { width: 100%; padding: 9px 12px 9px 34px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--sans); font-size: 0.85rem; outline: none; transition: border-color 0.2s; }
+  .search-box:focus { border-color: var(--accent); }
+  .search-wrap { position: relative; }
+  .search-wrap::before { content: "🔍"; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; pointer-events: none; }
+  .sidebar-stats { padding: 10px 20px; font-size: 0.75rem; color: var(--text-faint); border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  .convo-list { flex: 1; overflow-y: auto; }
+  .convo-item { padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: background 0.12s; }
+  .convo-item:hover { background: var(--surface); }
+  .convo-item.active { background: var(--accent-dim); border-left: 3px solid var(--accent); }
+  .convo-item .title { font-size: 0.88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+  .convo-item .meta { font-size: 0.72rem; color: var(--text-faint); font-family: var(--mono); display: flex; gap: 10px; }
+  .convo-item .meta .model { color: var(--gpt); }
+  .convo-item .preview { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+
+  /* ===== MAIN CHAT VIEW ===== */
+  .chat-header { padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--chat-bg); display: flex; justify-content: space-between; align-items: center; min-height: 60px; }
+  .chat-title { font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .chat-meta { font-size: 0.75rem; color: var(--text-faint); font-family: var(--mono); margin-left: 16px; white-space: nowrap; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 24px 28px; background: var(--chat-bg); }
+  .message { margin-bottom: 20px; display: flex; gap: 14px; max-width: 800px; }
+  .message.user { flex-direction: row-reverse; margin-left: auto; }
+  .msg-avatar { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; flex-shrink: 0; font-weight: 700; }
+  .message.user .msg-avatar { background: var(--accent-dim); color: var(--accent); }
+  .message.assistant .msg-avatar { background: var(--gpt-dim); color: var(--gpt); }
+  .message.system .msg-avatar { background: rgba(126,184,160,0.12); color: var(--green); }
+  .message.tool .msg-avatar { background: rgba(200,200,200,0.08); color: var(--text-dim); }
+  .msg-bubble { padding: 12px 16px; border-radius: 14px; font-size: 0.9rem; line-height: 1.65; max-width: 600px; word-wrap: break-word; white-space: pre-line; }
+  .msg-bubble pre { white-space: pre-wrap; margin: 8px 0; }
+  .msg-bubble strong { font-weight: 700; }
+  .img-placeholder { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.04); border: 1px dashed var(--border); border-radius: 10px; padding: 14px 16px; margin: 8px 0; color: var(--text-dim); font-size: 0.82rem; line-height: 1.4; }
+  .img-placeholder svg { flex-shrink: 0; }
+  .message.user .msg-bubble { background: var(--user-bubble); border-bottom-right-radius: 4px; }
+  .message.assistant .msg-bubble { background: var(--ai-bubble); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .message.system .msg-bubble { background: rgba(126,184,160,0.06); border: 1px solid rgba(126,184,160,0.15); font-style: italic; color: var(--text-dim); font-size: 0.82rem; }
+  .message.tool .msg-bubble { background: var(--surface); border: 1px solid var(--border); font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); }
+  .thinking-indicator { text-align: center; padding: 6px 0; font-size: 0.78rem; color: var(--text-faint); font-style: italic; }
+  .tool-indicator { text-align: center; padding: 6px 14px; margin: 4px auto; font-size: 0.75rem; color: var(--text-faint); font-family: var(--mono); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-width: 500px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msg-time { font-size: 0.68rem; color: var(--text-faint); margin-top: 4px; font-family: var(--mono); }
+  .message.user .msg-time { text-align: right; }
+  .msg-model { display: inline-block; font-size: 0.65rem; color: var(--gpt); background: var(--gpt-dim); padding: 1px 6px; border-radius: 4px; font-family: var(--mono); margin-left: 8px; vertical-align: middle; }
+
+  /* ===== MEMORY VIEW ===== */
+  .memory-list { flex: 1; overflow-y: auto; padding: 20px; }
+  .memory-item { padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; font-size: 0.88rem; line-height: 1.6; transition: border-color 0.15s; }
+  .memory-item:hover { border-color: var(--accent); }
+  .memory-item .memory-num { font-family: var(--mono); font-size: 0.72rem; color: var(--text-faint); margin-bottom: 4px; }
+  .memory-search { width: 100%; padding: 9px 12px 9px 34px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--sans); font-size: 0.85rem; outline: none; }
+  .memory-search:focus { border-color: var(--accent); }
+  .memory-stats { padding: 10px 20px; font-size: 0.75rem; color: var(--text-faint); border-bottom: 1px solid var(--border); font-family: var(--mono); }
+
+  /* ===== INSTRUCTIONS VIEW ===== */
+  .instr-view { flex: 1; overflow-y: auto; padding: 24px 28px; }
+  .instr-section { margin-bottom: 24px; }
+  .instr-section h3 { font-size: 0.82rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+  .instr-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .instr-card .label { font-size: 0.75rem; color: var(--text-faint); font-family: var(--mono); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .instr-card .value { font-size: 0.88rem; line-height: 1.6; white-space: pre-line; }
+  .instr-card .value.empty { color: var(--text-faint); font-style: italic; }
+  .instr-pair { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .instr-pair:last-child { border-bottom: none; }
+  .instr-pair .key { font-size: 0.78rem; color: var(--text-dim); font-family: var(--mono); }
+  .instr-pair .val { font-size: 0.82rem; color: var(--text); }
+
+  /* ===== ADD MORE FILES BUTTON ===== */
+  .add-more-bar { padding: 8px 16px; border-top: 1px solid var(--border); text-align: center; }
+  .add-more-btn { background: none; border: 1px dashed var(--border); border-radius: 6px; color: var(--text-faint); font-family: var(--sans); font-size: 0.75rem; padding: 6px 14px; cursor: pointer; transition: all 0.15s; }
+  .add-more-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ===== BRANCH CAROUSEL ===== */
+  .branch-nav { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; font-family: var(--mono); font-size: 0.68rem; color: var(--text-faint); vertical-align: middle; }
+  .branch-nav button { background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; display: inline-flex; align-items: center; justify-content: center; transition: all 0.12s; padding: 0; }
+  .branch-nav button:hover { border-color: var(--accent); color: var(--accent); }
+  .branch-indicator { color: var(--gpt); font-size: 0.68rem; }
+  .branch-alt .msg-bubble { border: 1px dashed var(--border); opacity: 0.95; }
+  .branch-badge { font-size: 0.68rem; color: var(--gpt); margin-left: 4px; }
+
+  /* ===== OLD EXPORT BANNER ===== */
+  .old-export-banner { padding: 10px 20px; background: rgba(212,165,116,0.08); border-bottom: 1px solid var(--border); font-size: 0.78rem; color: var(--accent); line-height: 1.5; }
+  .old-export-banner a { color: var(--accent); text-decoration: underline; }
+
+  /* ===== PULSE ANIMATION ===== */
+  @keyframes branch-pulse { 0%, 100% { box-shadow: none; } 50% { box-shadow: 0 0 0 3px rgba(152,152,212,0.25); } }
+  .branch-highlight { animation: branch-pulse 1.5s ease-in-out 2; border-radius: 14px; }
+
+  /* ===== VERSION FOOTER ===== */
+  .viewer-footer { padding: 6px 16px; border-top: 1px solid var(--border); font-size: 0.65rem; color: var(--text-faint); font-family: var(--mono); text-align: center; }
+
+  /* ===== SEARCH RESULTS ===== */
+  .search-results { padding: 16px 28px; overflow-y: auto; flex: 1; background: var(--chat-bg); }
+  .search-results h3 { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 16px; font-weight: 600; }
+  .search-result { padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; cursor: pointer; transition: border-color 0.15s; }
+  .search-result:hover { border-color: var(--accent); }
+  .search-result .sr-title { font-size: 0.88rem; font-weight: 600; margin-bottom: 4px; }
+  .search-result .sr-match { font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; }
+  .search-result .sr-match mark { background: var(--accent-dim); color: var(--accent); border-radius: 2px; padding: 0 2px; }
+  .search-result .sr-meta { font-size: 0.7rem; color: var(--text-faint); margin-top: 6px; font-family: var(--mono); }
+
+  /* ===== EMPTY STATE ===== */
+  .empty-chat { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-faint); font-size: 0.9rem; background: var(--chat-bg); }
+
+  /* ===== SCROLLBAR ===== */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a44; }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    .sidebar { width: 100%; min-width: 100%; position: absolute; z-index: 10; height: 100%; transform: translateX(0); transition: transform 0.2s; }
+    .sidebar.hidden { transform: translateX(-100%); }
+    .mobile-toggle { display: block !important; }
+  }
+  .mobile-toggle { display: none; background: none; border: none; color: var(--text); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; }
+
+  /* ===== LOADING ===== */
+  .loading { text-align: center; padding: 3rem; color: var(--text-dim); }
+  .loading .spinner { display: inline-block; width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== MEMORY VIEWER (legacy) ===== */
+
+  /* Sort controls */
+  .sort-controls { padding: 8px 20px; display: flex; gap: 6px; border-bottom: 1px solid var(--border); }
+  .sort-btn { padding: 4px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-size: 0.72rem; font-family: var(--mono); cursor: pointer; transition: all 0.15s; }
+  .sort-btn:hover { border-color: var(--accent); color: var(--text); }
+  .sort-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <!-- INITIAL DROP ZONE -->
+  <div class="drop-zone" id="drop-zone">
+    <div class="drop-zone-inner">
+      <div class="icon">📂</div>
+      <h1>ChatGPT Export Viewer</h1>
+      <p>Browse your exported conversations, memories, and settings. Everything stays on your machine.</p>
+      <button class="file-btn" onclick="document.getElementById('file-input').click()">📎 Choose files</button>
+      <input type="file" id="file-input" accept=".json,.md,.txt" multiple style="display:none">
+      <div class="or">or drag and drop your files here</div>
+      <p style="font-size:0.82rem; color:var(--text-faint); line-height:1.6; margin-top:8px;">Supports: <strong style="color:var(--text-dim);">conversations</strong> (.json) · <strong style="color:var(--text-dim);">memories</strong> (.md) · <strong style="color:var(--text-dim);">instructions</strong> (.json)<br>Drop multiple files at once or load them one at a time.</p>
+      <p style="font-size:0.78rem; color:var(--text-faint); margin-top:12px;">Works with files exported by <a href="https://siamsnus.github.io/GPT2Claude-Migration-Kit" style="color:var(--accent);text-decoration:none;">GPT→Claude Migration Kit</a> or ChatGPT's official export.</p>
+      <p style="font-size:0.75rem; color:var(--text-faint); margin-top:8px;">🔒 No data is uploaded anywhere. <a href="viewer.html" download style="color:var(--accent);text-decoration:none;">Download this page</a> to use offline.</p>
+    </div>
+  </div>
+
+  <!-- SIDEBAR (hidden until file loaded) -->
+  <div class="sidebar" id="sidebar" style="display:none;">
+    <div class="tab-bar" id="tab-bar">
+      <button class="tab-btn active" data-tab="conversations" onclick="switchTab('conversations')">
+        <span class="tab-icon">💬</span>Chats<span class="tab-badge" id="tab-badge-convos"></span>
+      </button>
+      <button class="tab-btn empty" data-tab="memories" onclick="switchTab('memories')">
+        <span class="tab-icon">🧠</span>Memories<span class="tab-badge" id="tab-badge-mem"></span>
+      </button>
+      <button class="tab-btn empty" data-tab="instructions" onclick="switchTab('instructions')">
+        <span class="tab-icon">⚙️</span>Settings<span class="tab-badge" id="tab-badge-instr"></span>
+      </button>
+    </div>
+
+    <!-- CONVERSATIONS TAB -->
+    <div class="tab-panel active" id="panel-conversations">
+      <div class="old-export-banner" id="old-export-banner" style="display:none;">
+        🔀 Regenerated responses not available in this export. <a href="https://siamsnus.github.io/GPT2Claude-Migration-Kit" target="_blank">Re-export with the latest tool</a> to see them.
+      </div>
+      <div class="sidebar-header">
+        <div class="search-wrap">
+          <input type="text" class="search-box" id="search-box" placeholder="Search all messages...">
+        </div>
+      </div>
+      <div class="sidebar-stats" id="sidebar-stats"></div>
+      <div class="sort-controls" id="sort-controls">
+        <button class="sort-btn active" data-sort="newest">Newest</button>
+        <button class="sort-btn" data-sort="oldest">Oldest</button>
+        <button class="sort-btn" data-sort="alpha">A→Z</button>
+        <button class="sort-btn" data-sort="longest">Longest</button>
+      </div>
+      <div class="filter-controls" id="filter-controls" style="padding:6px 20px 8px;border-bottom:1px solid var(--border);">
+        <select id="model-filter" style="width:100%;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:0.75rem;outline:none;cursor:pointer;">
+          <option value="">All models</option>
+        </select>
+      </div>
+      <div class="convo-list" id="convo-list"></div>
+    </div>
+
+    <!-- MEMORIES TAB -->
+    <div class="tab-panel" id="panel-memories">
+      <div class="sidebar-header">
+        <div class="search-wrap">
+          <input type="text" class="search-box" id="memory-search" placeholder="Search memories...">
+        </div>
+      </div>
+      <div class="memory-stats" id="memory-stats"></div>
+      <div class="memory-list" id="memory-list" style="padding:12px 16px;">
+        <div style="color:var(--text-faint);font-size:0.85rem;padding:20px;text-align:center;">Drop a <strong>chatgpt_memories.md</strong> file to view your memories.</div>
+      </div>
+    </div>
+
+    <!-- INSTRUCTIONS TAB -->
+    <div class="tab-panel" id="panel-instructions">
+      <div class="instr-view" id="instr-view">
+        <div style="color:var(--text-faint);font-size:0.85rem;padding:20px;text-align:center;">Drop a <strong>chatgpt_instructions.json</strong> file to view your settings.</div>
+      </div>
+    </div>
+
+    <!-- ADD MORE FILES -->
+    <div class="add-more-bar">
+      <button class="add-more-btn" onclick="document.getElementById('file-input-more').click()">+ Load more files</button>
+      <input type="file" id="file-input-more" accept=".json,.md,.txt" multiple style="display:none">
+    </div>
+    <div class="viewer-footer" id="viewer-footer">Viewer v2.3</div>
+  </div>
+
+  <!-- MAIN CONTENT (hidden until file loaded) -->
+  <div class="main" id="main-area" style="display:none;">
+    <div class="chat-header" id="chat-header">
+      <button class="mobile-toggle" id="mobile-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="chat-title" id="chat-title">Select a conversation</div>
+      <div class="chat-meta" id="chat-meta"></div>
+    </div>
+    <div class="empty-chat" id="empty-chat">← Pick a conversation from the sidebar</div>
+    <div class="chat-messages" id="chat-messages" style="display:none;"></div>
+    <div class="search-results" id="search-results" style="display:none;"></div>
+    <div id="memory-main" style="display:none;flex-direction:column;flex:1;background:var(--chat-bg);overflow:hidden;"></div>
+    <div id="instr-main" style="display:none;flex-direction:column;flex:1;background:var(--chat-bg);overflow:hidden;"></div>
+  </div>
+</div>
+
+<script>
+var conversations = [];
+var memories = [];
+var instructionsData = null;
+var currentSort = "newest";
+var currentModelFilter = "";
+var searchTimeout = null;
+var loadedTypes = {};
+var exportFormatVersion = 0; // 0 = unknown/old, 3 = with branches
+
+// ===== TAB SWITCHING =====
+function switchTab(tab) {
+  var btns = document.querySelectorAll(".tab-btn");
+  var panels = document.querySelectorAll(".tab-panel");
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle("active", btns[i].getAttribute("data-tab") === tab);
+  }
+  for (var i = 0; i < panels.length; i++) {
+    panels[i].classList.toggle("active", panels[i].id === "panel-" + tab);
+  }
+  // Show appropriate main content
+  if (tab === "memories") {
+    showMemoryMain();
+  } else if (tab === "instructions") {
+    showInstructionsMain();
+  } else {
+    // Restore conversations view
+    document.getElementById("chat-messages").style.display = "none";
+    document.getElementById("empty-chat").style.display = "flex";
+    document.getElementById("search-results").style.display = "none";
+    document.getElementById("memory-main").style.display = "none";
+    document.getElementById("instr-main").style.display = "none";
+  }
+}
+
+function updateTabBadges() {
+  document.getElementById("tab-badge-convos").textContent = conversations.length > 0 ? " (" + conversations.length + ")" : "";
+  document.getElementById("tab-badge-mem").textContent = memories.length > 0 ? " (" + memories.length + ")" : "";
+  document.getElementById("tab-badge-instr").textContent = instructionsData ? " ✓" : "";
+
+  // Remove 'empty' class from tabs that have data
+  var tabs = document.querySelectorAll(".tab-btn");
+  for (var i = 0; i < tabs.length; i++) {
+    var t = tabs[i].getAttribute("data-tab");
+    if (t === "conversations" && conversations.length > 0) tabs[i].classList.remove("empty");
+    if (t === "memories" && memories.length > 0) tabs[i].classList.remove("empty");
+    if (t === "instructions" && instructionsData) tabs[i].classList.remove("empty");
+  }
+}
+
+// ===== FILE LOADING =====
+var dropZone = document.getElementById("drop-zone");
+var fileInput = document.getElementById("file-input");
+
+dropZone.addEventListener("dragover", function(e) {
+  e.preventDefault();
+  dropZone.classList.add("dragover");
+});
+dropZone.addEventListener("dragleave", function() {
+  dropZone.classList.remove("dragover");
+});
+dropZone.addEventListener("drop", function(e) {
+  e.preventDefault();
+  dropZone.classList.remove("dragover");
+  if (e.dataTransfer.files.length) loadFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener("change", function() {
+  if (fileInput.files.length) loadFiles(fileInput.files);
+});
+
+// "Load more files" button inside sidebar
+document.getElementById("file-input-more").addEventListener("change", function() {
+  if (this.files.length) loadFiles(this.files);
+  this.value = "";
+});
+
+// Also support drag-and-drop on the sidebar for additional files
+document.addEventListener("DOMContentLoaded", function() {
+  var sidebar = document.getElementById("sidebar");
+  sidebar.addEventListener("dragover", function(e) { e.preventDefault(); });
+  sidebar.addEventListener("drop", function(e) {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) loadFiles(e.dataTransfer.files);
+  });
+});
+
+function loadFiles(fileList) {
+  for (var i = 0; i < fileList.length; i++) {
+    loadFile(fileList[i]);
+  }
+}
+
+function loadFile(file) {
+  var ext = file.name.split(".").pop().toLowerCase();
+  if (ext !== "json" && ext !== "md" && ext !== "txt") {
+    alert("Unsupported file type: ." + ext + "\nPlease use .json, .md, or .txt files.");
+    return;
+  }
+
+  // Show loading state
+  if (dropZone.style.display !== "none") {
+    var sizeMB = (file.size / 1024 / 1024).toFixed(1);
+    dropZone.innerHTML = '<div class="loading"><div class="spinner"></div>' +
+      '<div style="margin-top:12px;font-size:0.95rem;font-weight:600;">Loading ' + escHtml(file.name) + '</div>' +
+      '<div style="font-size:0.78rem;color:var(--text-faint);margin-top:4px;">' + sizeMB + ' MB</div>' +
+      '<div style="width:280px;margin:16px auto 0;"><div style="width:100%;height:6px;background:var(--surface);border-radius:3px;overflow:hidden;">' +
+      '<div id="load-progress" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#e8c49a);border-radius:3px;transition:width 0.2s;"></div></div>' +
+      '<div id="load-status" style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;font-family:var(--mono);">Reading file...</div></div></div>';
+  }
+
+  var reader = new FileReader();
+  reader.onprogress = function(e) {
+    if (e.lengthComputable) {
+      var pct = Math.round((e.loaded / e.total) * 100);
+      var bar = document.getElementById("load-progress");
+      var status = document.getElementById("load-status");
+      if (bar) bar.style.width = pct + "%";
+      if (status) status.textContent = "Reading file... " + pct + "%";
+    }
+  };
+  reader.onload = function(e) {
+    var bar = document.getElementById("load-progress");
+    var status = document.getElementById("load-status");
+    if (bar) bar.style.width = "100%";
+    if (status) status.textContent = "Processing...";
+    setTimeout(function() {
+      processFile(file.name, e.target.result);
+    }, 50);
+  };
+  reader.readAsText(file);
+}
+
+function detectFileType(filename, content) {
+  var ext = filename.split(".").pop().toLowerCase();
+
+  // Markdown = memories
+  if (ext === "md" || ext === "txt") {
+    if (content.indexOf("# ChatGPT Memory Export") !== -1 || content.indexOf("Memory Export") !== -1 || filename.toLowerCase().indexOf("memor") !== -1) {
+      return "memories";
+    }
+    // Could still be a memories file without header
+    if (ext === "md") return "memories";
+    return "memories"; // .txt fallback
+  }
+
+  // JSON — detect which kind
+  try {
+    var data = JSON.parse(content);
+
+    // Instructions: has data.custom_instructions or data.settings
+    if (data.data && (data.data.custom_instructions || data.data.settings)) return "instructions";
+
+    // Conversations: array or object with conversations
+    if (Array.isArray(data) && data.length > 0 && (data[0].mapping || data[0].title)) return "conversations";
+    if (data.conversations && Array.isArray(data.conversations)) return "conversations";
+    if (data.data && Array.isArray(data.data) && data.data.length > 0) return "conversations";
+    if (data.title && (data.mapping || data.messages)) return "conversations";
+
+    // Instructions fallback: has tool/export_date but small
+    if (data.data && Object.keys(data.data).length > 0 && !data.conversations) return "instructions";
+
+    // Default to conversations for arrays
+    if (Array.isArray(data)) return "conversations";
+
+    return "conversations";
+  } catch (e) {
+    // Not valid JSON — treat as memories text
+    return "memories";
+  }
+}
+
+function processFile(filename, content) {
+  var type = detectFileType(filename, content);
+
+  if (type === "memories") {
+    processMemories(content);
+    showUI("memories");
+  } else if (type === "instructions") {
+    processInstructions(content);
+    showUI("instructions");
+  } else {
+    processConversations(content);
+    showUI("conversations");
+  }
+}
+
+function showUI(activeTab) {
+  dropZone.style.display = "none";
+  document.getElementById("sidebar").style.display = "flex";
+  document.getElementById("main-area").style.display = "flex";
+  updateTabBadges();
+  switchTab(activeTab);
+}
+
+// ===== PROCESS CONVERSATIONS =====
+function processConversations(content) {
+  // Strip OpenAI internal citation markers (private-use Unicode U+E200/E201/E202)
+  function stripCitations(text) {
+    if (!text) return text;
+    return text
+      .replace(/\uE200cite(\uE202turn\dsearch\d+)+\uE201/g, "")
+      .replace(/\uE200image_group\uE202\{[^}]*\}\uE201/g, "[🖼 images]")
+      .replace(/\uE200[\s\S]*?\uE201/g, "");
+  }
+
+  try {
+    var data = JSON.parse(content);
+  } catch (e) {
+    alert("Error parsing JSON: " + e.message);
+    return;
+  }
+
+  // Detect format version
+  if (data.format_version) exportFormatVersion = data.format_version;
+  else if (data.tool && data.tool.indexOf("v2.1") !== -1) exportFormatVersion = 3;
+
+  var raw = [];
+  if (Array.isArray(data)) raw = data;
+  else if (data.conversations && Array.isArray(data.conversations)) raw = data.conversations;
+  else if (data.data && Array.isArray(data.data)) raw = data.data;
+  else if (data.title) raw = [data];
+  else { alert("Unrecognized conversation format."); return; }
+
+  // Check if this is a raw ChatGPT official export (has mapping = can extract branches directly)
+  var isRawExport = raw.length > 0 && raw[0].mapping;
+
+  conversations = raw.map(function(c, idx) {
+    var msgs;
+    var hasBranches = false;
+
+    if (c.messages && Array.isArray(c.messages)) {
+      // Migration kit format: messages already flattened
+      msgs = c.messages.map(function(m) {
+        var msg = { role: m.role || "unknown", text: stripCitations(m.content || m.text || ""), timestamp: m.timestamp || 0, model: m.model || "" };
+        if (m.alternatives && m.alternatives.length > 0) {
+          msg.alternatives = m.alternatives.map(function(a) {
+            return { text: stripCitations(a.content || a.text || ""), role: a.role || "assistant", timestamp: a.timestamp || 0, model: a.model || "" };
+          });
+          hasBranches = true;
+        }
+        return msg;
+      });
+      if (c.has_branches) hasBranches = true;
+    } else if (c.mapping) {
+      // Raw ChatGPT format: walk tree and extract branches
+      var result = flattenMessagesWithBranches(c.mapping);
+      msgs = result.messages;
+      hasBranches = result.hasBranches;
+    } else {
+      msgs = [];
+    }
+
+    var createTime = Number(c.create_time) || 0;
+    var updateTime = Number(c.update_time) || 0;
+    if (!createTime && msgs.length > 0) {
+      for (var ti = 0; ti < msgs.length; ti++) {
+        if (msgs[ti].timestamp) { createTime = Number(msgs[ti].timestamp) || 0; break; }
+      }
+    }
+    if (!updateTime && msgs.length > 0) {
+      for (var ti = msgs.length - 1; ti >= 0; ti--) {
+        if (msgs[ti].timestamp) { updateTime = Number(msgs[ti].timestamp) || 0; break; }
+      }
+    }
+    if (!updateTime) updateTime = createTime;
+
+    return {
+      id: c.id || c.conversation_id || Math.random().toString(36).substr(2),
+      title: c.title || "Untitled",
+      create_time: createTime, update_time: updateTime, _index: idx,
+      model: c.model || c.default_model_slug || extractModel(c),
+      models_used: getModelsUsed(msgs),
+      project: c.project || null,
+      hasBranches: hasBranches,
+      messageCount: c.message_count || msgs.length,
+      messages: msgs
+    };
+  });
+
+  var withErrors = conversations.filter(function(c) { return c.messageCount === 0; }).length;
+  var totalMsgs = conversations.reduce(function(sum, c) { return sum + c.messageCount; }, 0);
+  var branchedCount = conversations.filter(function(c) { return c.hasBranches; }).length;
+  var statsText = conversations.length + " conversations · " + totalMsgs.toLocaleString() + " messages";
+  if (branchedCount > 0) statsText += " · " + branchedCount + " with regenerations";
+  if (withErrors > 0) statsText += " · " + withErrors + " empty";
+  document.getElementById("sidebar-stats").textContent = statsText;
+
+  // Show banner for old exports without branch data
+  if (exportFormatVersion < 3 && !isRawExport) {
+    var banner = document.getElementById("old-export-banner");
+    if (banner) banner.style.display = "block";
+  }
+
+  // Update version footer
+  if (data.tool) {
+    document.getElementById("viewer-footer").textContent = "Viewer v2.3 · Export: " + data.tool;
+  }
+
+  renderConversationList();
+  setupSearch();
+  setupSort();
+  setupModelFilter();
+  loadedTypes.conversations = true;
+}
+
+// ===== PROCESS MEMORIES =====
+function processMemories(content) {
+  memories = [];
+  var lines = content.split("\n");
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    // Skip headers and empty lines
+    if (!line || line.charAt(0) === "#") continue;
+    // Strip leading number (e.g. "1. " or "42. ")
+    var cleaned = line.replace(/^\d+\.\s*/, "");
+    if (cleaned.length > 0) {
+      memories.push(cleaned);
+    }
+  }
+
+  document.getElementById("memory-stats").textContent = memories.length + " memories";
+  renderMemoryList();
+  setupMemorySearch();
+  loadedTypes.memories = true;
+}
+
+function renderMemoryList(filter) {
+  var list = document.getElementById("memory-list");
+  var html = "";
+  var f = filter ? filter.toLowerCase() : "";
+  var shown = 0;
+
+  for (var i = 0; i < memories.length; i++) {
+    if (f && memories[i].toLowerCase().indexOf(f) === -1) continue;
+    shown++;
+    var text = escHtml(memories[i]);
+    if (f) {
+      // Highlight matches
+      var re = new RegExp("(" + escRegExp(escHtml(filter)) + ")", "gi");
+      text = text.replace(re, '<mark style="background:var(--accent-dim);color:var(--accent);border-radius:2px;padding:0 2px;">$1</mark>');
+    }
+    html += '<div class="memory-item"><div class="memory-num">#' + (i + 1) + '</div>' + text + '</div>';
+  }
+
+  if (!html) html = '<div style="color:var(--text-faint);font-size:0.85rem;padding:20px;text-align:center;">No memories found' + (f ? ' matching "' + escHtml(filter) + '"' : '') + '.</div>';
+  if (f) document.getElementById("memory-stats").textContent = shown + " / " + memories.length + " memories";
+  else document.getElementById("memory-stats").textContent = memories.length + " memories";
+  list.innerHTML = html;
+}
+
+function setupMemorySearch() {
+  var box = document.getElementById("memory-search");
+  box.addEventListener("input", function() {
+    clearTimeout(searchTimeout);
+    var q = box.value.trim();
+    searchTimeout = setTimeout(function() { renderMemoryList(q); }, 200);
+  });
+}
+
+function escRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function showMemoryMain() {
+  document.getElementById("chat-messages").style.display = "none";
+  document.getElementById("empty-chat").style.display = "none";
+  document.getElementById("search-results").style.display = "none";
+  document.getElementById("instr-main").style.display = "none";
+  var mm = document.getElementById("memory-main");
+  mm.style.display = "flex";
+  if (memories.length === 0) {
+    mm.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:0.9rem;">Load a memories file (.md) to browse them here.</div>';
+  } else {
+    mm.innerHTML = '<div style="padding:28px;overflow-y:auto;flex:1;">' +
+      '<h2 style="font-size:1.1rem;font-weight:700;margin-bottom:6px;">🧠 Your ChatGPT Memories</h2>' +
+      '<p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:20px;">' + memories.length + ' facts ChatGPT memorized about you. Search and filter in the sidebar.</p>' +
+      '<div style="display:grid;gap:10px;">' + memories.map(function(m, i) {
+        return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:0.88rem;line-height:1.6;">' +
+          '<span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-faint);">#' + (i+1) + '</span> ' + escHtml(m) + '</div>';
+      }).join("") + '</div></div>';
+  }
+}
+
+// ===== PROCESS INSTRUCTIONS =====
+function processInstructions(content) {
+  try {
+    instructionsData = JSON.parse(content);
+  } catch (e) {
+    alert("Error parsing instructions JSON: " + e.message);
+    return;
+  }
+  renderInstructionsSidebar();
+  loadedTypes.instructions = true;
+}
+
+function renderInstructionsSidebar() {
+  var view = document.getElementById("instr-view");
+  var d = instructionsData.data || instructionsData;
+  var html = '';
+
+  // Custom instructions
+  if (d.custom_instructions) {
+    var ci = d.custom_instructions;
+    html += '<div class="instr-section"><h3>Custom Instructions</h3><div class="instr-card">';
+
+    if (ci.about_user_message || ci.about_model_message) {
+      if (ci.about_user_message) {
+        html += '<div class="label">What would you like ChatGPT to know about you?</div>';
+        html += '<div class="value">' + escHtml(ci.about_user_message) + '</div>';
+      }
+      if (ci.about_model_message) {
+        html += '<div style="margin-top:14px;"><div class="label">How would you like ChatGPT to respond?</div>';
+        html += '<div class="value">' + escHtml(ci.about_model_message) + '</div></div>';
+      }
+    } else if (Array.isArray(ci)) {
+      for (var i = 0; i < ci.length; i++) {
+        var item = ci[i];
+        if (item.value) html += '<div class="value">' + escHtml(item.value) + '</div>';
+        else html += '<div class="value">' + escHtml(JSON.stringify(item, null, 2)) + '</div>';
+      }
+    } else {
+      html += '<div class="value">' + escHtml(JSON.stringify(ci, null, 2)) + '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  // Settings
+  if (d.settings) {
+    html += '<div class="instr-section"><h3>Account Settings</h3><div class="instr-card">';
+    var settings = d.settings;
+    var keys = Object.keys(settings);
+    for (var i = 0; i < keys.length; i++) {
+      var val = settings[keys[i]];
+      var display = typeof val === "object" ? JSON.stringify(val) : String(val);
+      html += '<div class="instr-pair"><span class="key">' + escHtml(keys[i]) + '</span><span class="val">' + escHtml(display) + '</span></div>';
+    }
+    html += '</div></div>';
+  }
+
+  // Anything else in the data
+  var otherKeys = Object.keys(d).filter(function(k) { return k !== "custom_instructions" && k !== "settings"; });
+  if (otherKeys.length > 0) {
+    html += '<div class="instr-section"><h3>Other Data</h3><div class="instr-card">';
+    for (var i = 0; i < otherKeys.length; i++) {
+      var val = d[otherKeys[i]];
+      var display = typeof val === "object" ? JSON.stringify(val, null, 2) : String(val);
+      html += '<div class="instr-pair"><span class="key">' + escHtml(otherKeys[i]) + '</span><span class="val" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">' + escHtml(display) + '</span></div>';
+    }
+    html += '</div></div>';
+  }
+
+  // Export metadata
+  if (instructionsData.export_date) {
+    html += '<div class="instr-section" style="margin-top:20px;"><div style="font-size:0.72rem;color:var(--text-faint);font-family:var(--mono);">Exported: ' + escHtml(instructionsData.export_date) + '</div></div>';
+  }
+
+  if (!html) html = '<div style="color:var(--text-faint);padding:20px;text-align:center;">No settings data found.</div>';
+  view.innerHTML = html;
+}
+
+function showInstructionsMain() {
+  document.getElementById("chat-messages").style.display = "none";
+  document.getElementById("empty-chat").style.display = "none";
+  document.getElementById("search-results").style.display = "none";
+  document.getElementById("memory-main").style.display = "none";
+  var im = document.getElementById("instr-main");
+  im.style.display = "flex";
+  if (!instructionsData) {
+    im.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:0.9rem;">Load an instructions file (.json) to browse your settings here.</div>';
+    return;
+  }
+  var d = instructionsData.data || instructionsData;
+  var html = '<div style="padding:28px;overflow-y:auto;flex:1;">';
+  html += '<h2 style="font-size:1.1rem;font-weight:700;margin-bottom:6px;">⚙️ Your ChatGPT Settings</h2>';
+  html += '<p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:24px;">Custom instructions and account settings. Also shown in the sidebar.</p>';
+
+  // Custom instructions — big cards
+  if (d.custom_instructions) {
+    var ci = d.custom_instructions;
+    if (ci.about_user_message) {
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;">';
+      html += '<div style="font-size:0.75rem;color:var(--accent);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;">About You</div>';
+      html += '<div style="font-size:0.9rem;line-height:1.7;white-space:pre-line;">' + escHtml(ci.about_user_message) + '</div></div>';
+    }
+    if (ci.about_model_message) {
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;">';
+      html += '<div style="font-size:0.75rem;color:var(--accent);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;">Response Style</div>';
+      html += '<div style="font-size:0.9rem;line-height:1.7;white-space:pre-line;">' + escHtml(ci.about_model_message) + '</div></div>';
+    }
+  }
+  html += '</div>';
+  im.innerHTML = html;
+}
+
+function extractModel(c) {
+  if (!c.mapping) return "unknown";
+  var keys = Object.keys(c.mapping);
+  for (var i = 0; i < keys.length; i++) {
+    var node = c.mapping[keys[i]];
+    if (node.message && node.message.metadata && node.message.metadata.model_slug) {
+      return node.message.metadata.model_slug;
+    }
+  }
+  return "unknown";
+}
+
+function countMessages(mapping) {
+  var count = 0;
+  var keys = Object.keys(mapping);
+  for (var i = 0; i < keys.length; i++) {
+    var node = mapping[keys[i]];
+    if (node.message && node.message.content && node.message.content.parts) {
+      var text = node.message.content.parts.join("");
+      if (text.trim()) count++;
+    }
+  }
+  return count;
+}
+
+function flattenMessages(mapping) {
+  var result = flattenMessagesWithBranches(mapping);
+  return result.messages;
+}
+
+function flattenMessagesWithBranches(mapping) {
+  var messages = [];
+  var hasBranches = false;
+  var keys = Object.keys(mapping);
+  if (!keys.length) return {messages: messages, hasBranches: false};
+
+  // Find root node (no parent)
+  var rootId = null;
+  for (var i = 0; i < keys.length; i++) {
+    if (!mapping[keys[i]].parent) {
+      rootId = keys[i];
+      break;
+    }
+  }
+  if (!rootId) rootId = keys[0];
+
+  // Helper: extract text from node
+  function nodeText(node) {
+    if (!node || !node.message || !node.message.content) return "";
+    var content = node.message.content;
+    // Handle special content types
+    var ct = content.content_type;
+    if (ct === "model_editable_context") return "";
+    if (ct === "thoughts") return "[thinking]";
+    if (ct === "reasoning_recap") return "[" + (content.content || "Thinking...") + "]";
+    if ((ct === "code" || ct === "execution_output") && content.text) {
+      if ((content.language === "unknown" || !content.language) && content.text.indexOf("search(") === 0) {
+        return "[🔍 " + content.text + "]";
+      }
+      return "```" + (content.language || "") + "\n" + content.text + "\n```";
+    }
+    if (!content.parts) return "";
+    return content.parts.map(function(p) {
+      if (typeof p === "string") return p;
+      if (p && p.text) return p.text;
+      if (p && (p.content_type === "image_asset_pointer" || p.asset_pointer)) {
+        var imgName = (p.metadata && p.metadata.dalle && p.metadata.dalle.prompt) ? "DALL-E: " + p.metadata.dalle.prompt : "image";
+        return "[🖼 " + imgName + "]";
+      }
+      return "";
+    }).join("");
+  }
+
+  // Walk the tree depth-first following last child
+  var visited = {};
+  var current = rootId;
+  var safety = 0;
+  while (current && safety < 50000) {
+    safety++;
+    if (visited[current]) break;
+    visited[current] = true;
+
+    var node = mapping[current];
+    if (node && node.message) {
+      var text = nodeText(node);
+      if (text.trim()) {
+        var msg = {
+          role: (node.message.author ? node.message.author.role : "unknown"),
+          text: text,
+          timestamp: node.message.create_time || 0,
+          model: (node.message.metadata && node.message.metadata.model_slug) || ""
+        };
+
+        // Check parent for siblings (= alternatives / regenerations)
+        if (node.parent && mapping[node.parent]) {
+          var parentNode = mapping[node.parent];
+          if (parentNode.children && parentNode.children.length > 1) {
+            var alts = [];
+            for (var si = 0; si < parentNode.children.length; si++) {
+              var sibId = parentNode.children[si];
+              if (sibId === current) continue;
+              var sib = mapping[sibId];
+              if (sib && sib.message) {
+                var sibText = nodeText(sib);
+                if (sibText.trim()) {
+                  alts.push({
+                    text: sibText,
+                    role: (sib.message.author ? sib.message.author.role : "unknown"),
+                    timestamp: sib.message.create_time || 0,
+                    model: (sib.message.metadata && sib.message.metadata.model_slug) || ""
+                  });
+                }
+              }
+            }
+            if (alts.length > 0) {
+              msg.alternatives = alts;
+              hasBranches = true;
+            }
+          }
+        }
+
+        messages.push(msg);
+      }
+    }
+
+    // Follow last child
+    if (node && node.children && node.children.length > 0) {
+      current = node.children[node.children.length - 1];
+    } else {
+      break;
+    }
+  }
+  return {messages: messages, hasBranches: hasBranches};
+}
+
+// ===== RENDER CONVERSATION LIST =====
+function renderConversationList(filter) {
+  var list = document.getElementById("convo-list");
+  var sorted = conversations.slice();
+
+  // Sort — use original array index as fallback (API returns newest first)
+  if (currentSort === "newest") sorted.sort(function(a,b) {
+    var diff = (b.update_time || 0) - (a.update_time || 0);
+    return diff !== 0 ? diff : a._index - b._index;
+  });
+  else if (currentSort === "oldest") sorted.sort(function(a,b) {
+    var diff = (a.create_time || 0) - (b.create_time || 0);
+    return diff !== 0 ? diff : b._index - a._index;
+  });
+  else if (currentSort === "alpha") sorted.sort(function(a,b) { return a.title.localeCompare(b.title); });
+  else if (currentSort === "longest") sorted.sort(function(a,b) { return b.messageCount - a.messageCount; });
+
+  // Filter by model (checks actual message-level models)
+  if (currentModelFilter) {
+    sorted = sorted.filter(function(c) {
+      if (c.models_used.indexOf(currentModelFilter) !== -1) return true;
+      if (c.models_used.length === 0 && c.model === currentModelFilter) return true;
+      return false;
+    });
+  }
+
+  // Filter by text
+  if (filter) {
+    var f = filter.toLowerCase();
+    sorted = sorted.filter(function(c) {
+      return c.title.toLowerCase().indexOf(f) !== -1;
+    });
+  }
+
+  var html = "";
+  for (var i = 0; i < sorted.length; i++) {
+    var c = sorted[i];
+    var date = formatDate(c.update_time || c.create_time);
+    var preview = "";
+    for (var pi = 0; pi < c.messages.length; pi++) {
+      if (!isMetadataMessage(c.messages[pi]) && c.messages[pi].role === "user") {
+        preview = c.messages[pi].text.substring(0, 80).replace(/\n/g, " ");
+        break;
+      }
+    }
+    if (!preview && c.messages.length > 0) {
+      for (var pi = 0; pi < c.messages.length; pi++) {
+        if (!isMetadataMessage(c.messages[pi])) {
+          preview = c.messages[pi].text.substring(0, 80).replace(/\n/g, " ");
+          break;
+        }
+      }
+    }
+    html += '<div class="convo-item" data-id="' + c.id + '" onclick="openConversation(\'' + c.id + '\')">' +
+      '<div class="title">' + escHtml(c.title) + (c.hasBranches ? '<span class="branch-badge" title="Has regenerated responses">🔀</span>' : '') + '</div>' +
+      '<div class="meta"><span>' + date + '</span><span>' + c.messageCount + ' msgs</span><span class="model">' + escHtml(c.models_used.length > 0 ? c.models_used.join(", ") : c.model) + '</span></div>' +
+      (c.project ? '<div class="meta" style="margin-top:2px;"><span style="color:var(--green);">📁 ' + escHtml(c.project) + '</span></div>' : '') +
+      (preview ? '<div class="preview">' + escHtml(preview) + '</div>' : '') +
+      '</div>';
+  }
+
+  if (!html) html = '<div style="padding:20px;color:var(--text-faint);font-size:0.85rem;">No conversations found.</div>';
+  list.innerHTML = html;
+}
+
+// ===== OPEN CONVERSATION =====
+function openConversation(id) {
+  var c = null;
+  for (var i = 0; i < conversations.length; i++) {
+    if (conversations[i].id === id) { c = conversations[i]; break; }
+  }
+  if (!c) return;
+
+  // Update sidebar active state
+  var items = document.querySelectorAll(".convo-item");
+  for (var i = 0; i < items.length; i++) {
+    items[i].classList.toggle("active", items[i].getAttribute("data-id") === id);
+  }
+
+  // Header
+  document.getElementById("chat-title").textContent = c.title;
+  var dateStr = formatDateLong(c.create_time);
+  var metaParts = [];
+  if (dateStr) metaParts.push(dateStr);
+  if (c.model && c.model !== "unknown") metaParts.push(c.model);
+  metaParts.push(c.messageCount + " messages");
+  if (c.project) metaParts.push("📁 " + c.project);
+  document.getElementById("chat-meta").textContent = metaParts.join(" · ");
+
+  // Messages
+  var container = document.getElementById("chat-messages");
+  var html = "";
+  var firstBranchIdx = -1;
+
+  for (var i = 0; i < c.messages.length; i++) {
+    var m = c.messages[i];
+    if (isMetadataMessage(m)) continue;
+    var role = m.role || "unknown";
+    var roleClass = role;
+    if (role === "user") roleClass = "user";
+    else if (role === "assistant") roleClass = "assistant";
+    else if (role === "system") roleClass = "system";
+    else roleClass = "tool";
+
+    var avatar = role === "user" ? "Y" : role === "assistant" ? "AI" : role === "system" ? "S" : "T";
+    var time = formatDateTime(m.timestamp);
+    var hasAlts = m.alternatives && m.alternatives.length > 0;
+    var totalAlts = hasAlts ? m.alternatives.length + 1 : 0;
+    var msgText = m.text || "";
+
+    // Special rendering for thinking/reasoning/tool messages
+    var isThinking = msgText === "[thinking]";
+    var isRecap = msgText.indexOf("[Thought ") === 0 || msgText.indexOf("[Thinking") === 0;
+    var isSearch = msgText.indexOf("[🔍 ") === 0;
+
+    // Skip standalone thinking markers — they'll merge with the recap below
+    if (isThinking) continue;
+
+    // Render reasoning recap as a subtle inline indicator
+    if (isRecap) {
+      var recapText = msgText.replace(/^\[/, '').replace(/\]$/, '');
+      html += '<div class="thinking-indicator">💭 ' + escHtml(recapText) + '</div>';
+      continue;
+    }
+
+    // Render search/tool use as a subtle indicator
+    if (isSearch) {
+      var searchText = msgText.replace(/^\[🔍 /, '').replace(/\]$/, '');
+      html += '<div class="tool-indicator">🔍 ' + escHtml(searchText) + '</div>';
+      continue;
+    }
+
+    if (hasAlts && firstBranchIdx === -1) firstBranchIdx = i;
+
+    var msgId = "msg-" + i;
+    html += '<div class="message ' + roleClass + (hasAlts && firstBranchIdx === i ? ' branch-highlight' : '') + '" id="' + msgId + '">' +
+      '<div class="msg-avatar">' + avatar + '</div>' +
+      '<div style="flex:1;min-width:0;">';
+
+    if (hasAlts) {
+      // Render carousel container with all versions
+      html += '<div class="branch-carousel" data-msg="' + i + '" data-current="0" data-total="' + totalAlts + '">';
+      // Main (current) version
+      html += '<div class="branch-version branch-v-0" style="display:block;"><div class="msg-bubble">' + renderMarkdown(m.text) + '</div></div>';
+      // Alternatives
+      for (var ai = 0; ai < m.alternatives.length; ai++) {
+        var alt = m.alternatives[ai];
+        html += '<div class="branch-version branch-v-' + (ai + 1) + '" style="display:none;"><div class="msg-bubble branch-alt">' + renderMarkdown(alt.text) + '</div></div>';
+      }
+      html += '</div>';
+      // Time + model + carousel nav
+      html += '<div class="msg-time">' + (time ? time : '') +
+        '<span class="msg-model branch-model-0">' + escHtml(m.model || "") + '</span>';
+      for (var ai = 0; ai < m.alternatives.length; ai++) {
+        html += '<span class="msg-model branch-model-' + (ai+1) + '" style="display:none;">' + escHtml(m.alternatives[ai].model || "") + '</span>';
+      }
+      html += '<span class="branch-nav">' +
+        '<button onclick="branchPrev(' + i + ')" title="Previous version">◀</button>' +
+        '<span class="branch-indicator" id="branch-ind-' + i + '">1/' + totalAlts + '</span>' +
+        '<button onclick="branchNext(' + i + ')" title="Next version">▶</button>' +
+        '</span></div>';
+    } else {
+      html += '<div class="msg-bubble">' + renderMarkdown(m.text) + '</div>' +
+        '<div class="msg-time">' + (time ? time : '') +
+        (m.model && m.role === "assistant" ? '<span class="msg-model">' + escHtml(m.model) + '</span>' : '') +
+        '</div>';
+    }
+
+    html += '</div></div>';
+  }
+
+  container.innerHTML = html;
+  container.style.display = "block";
+  document.getElementById("empty-chat").style.display = "none";
+  document.getElementById("search-results").style.display = "none";
+  document.getElementById("memory-main").style.display = "none";
+  document.getElementById("instr-main").style.display = "none";
+  container.scrollTop = 0;
+
+  // Mobile: hide sidebar
+  if (window.innerWidth <= 768) {
+    document.getElementById("sidebar").classList.add("hidden");
+  }
+}
+
+// ===== SEARCH =====
+function setupSearch() {
+  var box = document.getElementById("search-box");
+  box.addEventListener("input", function() {
+    clearTimeout(searchTimeout);
+    var q = box.value.trim();
+    if (q.length < 2) {
+      renderConversationList();
+      document.getElementById("search-results").style.display = "none";
+      document.getElementById("chat-messages").style.display = "none";
+      document.getElementById("memory-main").style.display = "none";
+      document.getElementById("instr-main").style.display = "none";
+      document.getElementById("empty-chat").style.display = "flex";
+      return;
+    }
+    searchTimeout = setTimeout(function() { runSearch(q); }, 300);
+  });
+}
+
+function runSearch(query) {
+  var q = query.toLowerCase();
+  var results = [];
+
+  for (var i = 0; i < conversations.length; i++) {
+    var c = conversations[i];
+    for (var j = 0; j < c.messages.length; j++) {
+      var m = c.messages[j];
+      if (isMetadataMessage(m)) continue;
+      var idx = m.text.toLowerCase().indexOf(q);
+      if (idx !== -1) {
+        // Extract context around match
+        var start = Math.max(0, idx - 60);
+        var end = Math.min(m.text.length, idx + query.length + 60);
+        var snippet = (start > 0 ? "..." : "") +
+          m.text.substring(start, idx) +
+          "|||MARK|||" + m.text.substring(idx, idx + query.length) + "|||/MARK|||" +
+          m.text.substring(idx + query.length, end) +
+          (end < m.text.length ? "..." : "");
+
+        results.push({
+          convoId: c.id,
+          convoTitle: c.title,
+          role: m.role,
+          snippet: snippet,
+          date: formatDate(c.update_time)
+        });
+
+        if (results.length >= 100) break;
+      }
+    }
+    if (results.length >= 100) break;
+  }
+
+  // Render results
+  var container = document.getElementById("search-results");
+  var html = '<h3>' + results.length + (results.length >= 100 ? '+' : '') + ' results for "' + escHtml(query) + '"</h3>';
+
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    var snippetHtml = escHtml(r.snippet).replace("|||MARK|||", "<mark>").replace("|||/MARK|||", "</mark>");
+    html += '<div class="search-result" onclick="openConversation(\'' + r.convoId + '\')">' +
+      '<div class="sr-title">' + escHtml(r.convoTitle) + '</div>' +
+      '<div class="sr-match">' + snippetHtml + '</div>' +
+      '<div class="sr-meta">' + r.role + ' · ' + r.date + '</div>' +
+      '</div>';
+  }
+
+  if (!results.length) {
+    html += '<div style="color:var(--text-faint);padding:2rem;text-align:center;">No messages found matching "' + escHtml(query) + '"</div>';
+  }
+
+  container.innerHTML = html;
+  container.style.display = "block";
+  document.getElementById("chat-messages").style.display = "none";
+  document.getElementById("empty-chat").style.display = "none";
+  document.getElementById("memory-main").style.display = "none";
+  document.getElementById("instr-main").style.display = "none";
+
+  // Also filter sidebar
+  renderConversationList(query);
+}
+
+// ===== SORT =====
+function setupSort() {
+  var btns = document.querySelectorAll(".sort-btn");
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener("click", function() {
+      currentSort = this.getAttribute("data-sort");
+      for (var j = 0; j < btns.length; j++) btns[j].classList.remove("active");
+      this.classList.add("active");
+      renderConversationList();
+    });
+  }
+}
+
+// ===== MODEL FILTER =====
+function setupModelFilter() {
+  var models = {};
+  for (var i = 0; i < conversations.length; i++) {
+    var used = conversations[i].models_used;
+    for (var j = 0; j < used.length; j++) {
+      if (used[j]) models[used[j]] = (models[used[j]] || 0) + 1;
+    }
+    // Also count conversation-level model as fallback
+    var m = conversations[i].model;
+    if (m && m !== "unknown" && used.length === 0) models[m] = (models[m] || 0) + 1;
+  }
+  var select = document.getElementById("model-filter");
+  var sortedModels = Object.keys(models).sort();
+  select.innerHTML = '<option value="">All models (' + conversations.length + ')</option>';
+  for (var i = 0; i < sortedModels.length; i++) {
+    var opt = document.createElement("option");
+    opt.value = sortedModels[i];
+    opt.textContent = sortedModels[i] + " (" + models[sortedModels[i]] + ")";
+    select.appendChild(opt);
+  }
+  select.addEventListener("change", function() {
+    currentModelFilter = this.value;
+    renderConversationList();
+  });
+}
+
+// ===== MOBILE =====
+function toggleSidebar() {
+  document.getElementById("sidebar").classList.toggle("hidden");
+}
+
+// ===== BRANCH CAROUSEL =====
+function branchNav(msgIdx, direction) {
+  var carousel = document.querySelector('.branch-carousel[data-msg="' + msgIdx + '"]');
+  if (!carousel) return;
+  var current = parseInt(carousel.getAttribute("data-current"));
+  var total = parseInt(carousel.getAttribute("data-total"));
+  var next = current + direction;
+  if (next < 0) next = total - 1;
+  if (next >= total) next = 0;
+
+  // Hide current, show next
+  var versions = carousel.querySelectorAll(".branch-version");
+  for (var i = 0; i < versions.length; i++) {
+    versions[i].style.display = i === next ? "block" : "none";
+  }
+  carousel.setAttribute("data-current", next);
+
+  // Update indicator
+  var ind = document.getElementById("branch-ind-" + msgIdx);
+  if (ind) ind.textContent = (next + 1) + "/" + total;
+
+  // Update model badge
+  var msgEl = carousel.closest(".message");
+  if (msgEl) {
+    var models = msgEl.querySelectorAll("[class^='msg-model branch-model-']");
+    for (var i = 0; i < models.length; i++) {
+      models[i].style.display = i === next ? "inline-block" : "none";
+    }
+  }
+}
+
+function branchPrev(msgIdx) { branchNav(msgIdx, -1); }
+function branchNext(msgIdx) { branchNav(msgIdx, 1); }
+
+// Keyboard navigation for branches
+document.addEventListener("keydown", function(e) {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    // Find all carousels in view
+    var carousels = document.querySelectorAll(".branch-carousel");
+    if (carousels.length === 0) return;
+    // Find the one most visible (closest to viewport center)
+    var viewCenter = window.innerHeight / 2;
+    var closest = null;
+    var closestDist = Infinity;
+    for (var i = 0; i < carousels.length; i++) {
+      var rect = carousels[i].getBoundingClientRect();
+      var dist = Math.abs(rect.top + rect.height / 2 - viewCenter);
+      if (dist < closestDist) { closestDist = dist; closest = carousels[i]; }
+    }
+    if (closest) {
+      var msgIdx = parseInt(closest.getAttribute("data-msg"));
+      branchNav(msgIdx, e.key === "ArrowLeft" ? -1 : 1);
+      e.preventDefault();
+    }
+  }
+});
+
+// ===== UTILS =====
+function escHtml(s) {
+  if (!s) return "";
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function renderMarkdown(text) {
+  // Strip OpenAI internal citation markers and image groups (private-use Unicode delimiters)
+  var cleaned = text
+    .replace(/\uE200cite(\uE202turn\dsearch\d+)+\uE201/g, "")
+    .replace(/\uE200image_group\uE202\{[^}]*\}\uE201/g, "[🖼 images]")
+    .replace(/\uE200[\s\S]*?\uE201/g, "");
+  var s = escHtml(cleaned);
+  // Image placeholders — [🖼 description] markers from export
+  s = s.replace(/\[🖼\s*([^\]]*)\]/g, '<div class="img-placeholder"><svg width="36" height="36" viewBox="0 0 36 36" fill="none"><rect width="36" height="36" rx="8" fill="rgba(212,165,116,0.1)"/><path d="M10 24l5-7 4 5 3-4 4 6H10z" fill="rgba(212,165,116,0.3)"/><circle cx="23" cy="14" r="3" fill="rgba(212,165,116,0.3)"/></svg><span>$1<br><span style="font-size:0.72rem;color:var(--text-faint);">Image not included in export</span></span></div>');
+  // Headers
+  s = s.replace(/^### (.+)$/gm, '<strong style="font-size:1.05em;">$1</strong>');
+  s = s.replace(/^## (.+)$/gm, '<strong style="font-size:1.1em;">$1</strong>');
+  s = s.replace(/^# (.+)$/gm, '<strong style="font-size:1.15em;">$1</strong>');
+  // Bold
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Inline code
+  s = s.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:0.88em;">$1</code>');
+  // Code blocks
+  s = s.replace(/```[\w]*\n([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,0.3);padding:10px 12px;border-radius:8px;overflow-x:auto;font-size:0.85em;margin:8px 0;">$1</pre>');
+  // Lists (- or *)
+  s = s.replace(/^[\-\*] (.+)$/gm, '<span style="display:block;padding-left:1.2em;text-indent:-0.8em;">• $1</span>');
+  // Numbered lists
+  s = s.replace(/^(\d+)\. (.+)$/gm, '<span style="display:block;padding-left:1.2em;text-indent:-1.2em;">$1. $2</span>');
+  // Links
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">$1</a>');
+  // Plain URLs
+  s = s.replace(/(^|[^"=])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;word-break:break-all;">$2</a>');
+  return s;
+}
+
+function isMetadataMessage(m) {
+  var t = m.text || m.content || "";
+  // Keep thinking/reasoning markers visible
+  if (t === "[thinking]") return false;
+  if (t.indexOf("[Thought ") === 0 || t.indexOf("[Thinking") === 0) return false;
+  if (t.indexOf("[🔍 ") === 0) return false; // search queries
+  // Filter out system metadata that ChatGPT hides
+  if (t.trim().charAt(0) === '{') {
+    try {
+      var obj = JSON.parse(t.trim());
+      if (obj.content_type || obj.repository !== undefined || obj.model_set_context !== undefined || obj.structured_context !== undefined) return true;
+    } catch(e) {}
+  }
+  // Filter out empty or very short system messages
+  if ((m.role === "system" || m.role === "tool") && t.trim().length < 5) return true;
+  return false;
+}
+
+function formatDate(ts) {
+  if (!ts) return "";
+  // Handle seconds vs milliseconds
+  var ms = ts > 1e12 ? ts : ts * 1000;
+  var d = new Date(ms);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"});
+}
+
+function formatDateTime(ts) {
+  if (!ts) return "";
+  var ms = ts > 1e12 ? ts : ts * 1000;
+  var d = new Date(ms);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-US", {hour:"numeric", minute:"2-digit", month:"short", day:"numeric"});
+}
+
+function formatDateLong(ts) {
+  if (!ts) return "";
+  var ms = ts > 1e12 ? ts : ts * 1000;
+  var d = new Date(ms);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", {weekday:"short", month:"short", day:"numeric", year:"numeric"});
+}
+
+function getModelsUsed(msgs) {
+  var models = {};
+  for (var i = 0; i < msgs.length; i++) {
+    if (msgs[i].model && msgs[i].role === "assistant") {
+      models[msgs[i].model] = true;
+    }
+  }
+  return Object.keys(models);
+}
+</script>
+</body>
+</html>
+</file>
+
+<file path="README.md">
+# GPT→Claude Migration Kit
+
+Export everything from ChatGPT — memories, conversations, and custom instructions — and bring it to Claude.
+
+**No extensions. No install. No data leaves your browser.**
+
+🌐 **[Use the tool → gpt2claude.com](https://gpt2claude.com)**
+
+---
+
+## What it does
+
+| Export | Description | Output file |
+| --- | --- | --- |
+| 🧠 **Memories** | Every fact ChatGPT memorized about you | `chatgpt_memories.md` |
+| 💬 **Conversations** | Every chat including projects, with full message history, timestamps, model info | `chatgpt_all_conversations.json` |
+| ⚙️ **Instructions** | Custom instructions and account settings | `chatgpt_instructions.json` |
+
+No existing browser extension exports memory items or custom instructions. This tool does.
+
+## Browse your export
+
+Don't want to read raw JSON? Open the **[Conversation Viewer](https://gpt2claude.com/viewer)** in your browser. Drop any of your exported files into it:
+
+**💬 Conversations** — drag `chatgpt_all_conversations.json`
+
+* Browse all conversations by title and date
+* Sort by newest, oldest, alphabetical, or longest
+* Filter by model (GPT-4o, GPT-5, etc.)
+* Search across all messages instantly
+* Read conversations with rendered markdown and per-message model badges
+* Browse regenerated responses with ◀ 1/3 ▶ carousel (use arrow keys!)
+* Project conversations shown with project badge
+
+**🧠 Memories** — drag `chatgpt_memories.md`
+
+* Browse all memorized facts in a searchable list
+
+**⚙️ Settings** — drag `chatgpt_instructions.json`
+
+* View your custom instructions and account settings
+
+Drop multiple files at once or load them one at a time — the viewer auto-detects file type. Everything runs locally, no data uploaded. [Download viewer.html](https://gpt2claude.com/viewer.html) and open it offline for extra privacy.
+
+## How to use
+
+### Option A: Bookmarklet (Chrome, Brave, Edge)
+
+1. Visit **[gpt2claude.com](https://gpt2claude.com)**
+2. Drag the **GPT→Claude Export** button to your bookmark bar
+3. Go to [chatgpt.com](https://chatgpt.com) and log in
+4. Click the bookmark — a floating export panel appears
+5. Click the export buttons — files download automatically
+
+### Option B: Console paste (Firefox & any browser)
+
+1. Go to **[gpt2claude.com](https://gpt2claude.com)** and click **"Copy full script to clipboard"**
+2. Go to [chatgpt.com](https://chatgpt.com) and log in
+3. Press `F12` → click **Console** tab
+4. Firefox only: type `allow pasting` and press Enter
+5. Paste (`Ctrl+V`) and press Enter
+6. The export panel appears on the page
+
+## Importing to Claude
+
+Upload the exported files to [claude.ai](https://claude.ai) in this order. You can also use the **Claude desktop app** — click the **+** button at the bottom left, then **Add files or photos** (or press `Ctrl+U`).
+
+### Step 1: Memories first
+
+Upload `chatgpt_memories.md` with this prompt:
+
+```
+I just migrated from ChatGPT. This file contains all the facts and memories ChatGPT had stored about me. Please read through every item carefully and remember all of these facts about me. Confirm what you've learned and note if anything seems contradictory or outdated.
+```
+
+### Step 2: Conversations
+
+Upload `chatgpt_all_conversations.json` with this prompt:
+
+```
+This is my complete ChatGPT conversation history. Please analyze it and create a structured summary: (1) Key ongoing projects or topics I frequently discussed, (2) Important decisions or conclusions we reached, (3) Any personal context like my profession, interests, communication style, and preferences, (4) Anything time-sensitive or unfinished that I should pick up.
+```
+
+**Large files:** If the JSON is too big to upload (100MB+), zip it first. Claude accepts `.zip` uploads. Right-click → Send to → Compressed (zipped) folder on Windows, or Compress on Mac.
+
+### Step 3: Instructions
+
+Upload `chatgpt_instructions.json` with this prompt:
+
+```
+These are my custom instructions and settings from ChatGPT. Please review them and adapt your communication style to match my preferences. Let me know what you've noted about how I like to interact.
+```
+
+### Pro tip
+
+If you used ChatGPT mostly for casual chats and only need to migrate work-related context, just upload the memories file. That gives Claude the core facts without cluttering it with thousands of irrelevant conversations. Quality beats quantity.
+
+## Persona Editor
+
+The **[Persona Editor](https://gpt2claude.com/persona)** is a separate tool for power users. It processes your official OpenAI data export (Settings → Data controls → Export data) and extracts every memory operation from ChatGPT's internal bio tool chain — what was remembered, forgotten, or failed. Review, edit, then export a curated persona briefing. Memory extraction logic by [KylieKat17](https://github.com/KylieKat17/Migration-Kit-Discrepancy-Audit).
+
+## What to expect after migrating
+
+**Claude remembers the facts but needs time to know *you*.**
+
+Think of it like switching doctors. The new doctor has your complete medical file — every test, every diagnosis, every note. But they don't *know* you yet. That takes a few visits.
+
+Claude gets roughly **70% of what ChatGPT knew** from the import — all the facts, topics, and history. The remaining 30% is personal calibration: your communication style, when you want detail vs. brevity, your sense of humor. That builds naturally over a couple of weeks.
+
+## How it works
+
+The tool runs entirely in your browser using your existing ChatGPT login session. It calls the same internal API endpoints that the ChatGPT web app uses:
+
+* `/api/auth/session` — gets your session token
+* `/backend-api/memories` — fetches memory items
+* `/backend-api/conversations` — lists all conversations
+* `/backend-api/conversation/{id}` — fetches full conversation detail
+* `/backend-api/user_system_messages` — fetches custom instructions
+
+No data is sent anywhere. Files are saved directly to your Downloads folder.
+
+## Features
+
+**Export:**
+
+* One-click export of all conversations, memories, and custom instructions
+* Smart download filters: filter by model, date range, count limit
+* Incremental export: load previous export to skip already-downloaded conversations
+* 5-method project discovery cascade (fixes silent conversation loss)
+* Batch downloading (10 conversations at a time)
+* Truncation detection and recovery
+* Archived and shared conversation export
+* Rate limit handling with auto-retry
+
+**Viewer:**
+
+* Tabbed interface: 💬 Chats · 🧠 Memories · ⚙️ Settings
+* Multi-file drag & drop with auto-detection
+* Search across all messages
+* Sort by date, name, or length
+* Filter by model
+* Per-message model badges
+* Branch/regeneration carousel with keyboard nav
+* Markdown rendering
+* Project badges
+* Works fully offline
+
+## Planned features
+
+* **Browser extension** — Firefox addon first, then Chrome. Solves bookmarklet size limits and enables auto-updates.
+* **Image export** — Download images (uploaded photos, DALL-E generations) referenced in conversations.
+* **Import to other platforms** — Tested import prompts for Gemini, Copilot, etc.
+
+## Requirements
+
+* A ChatGPT account (Free, Plus, Team, or Enterprise)
+* A modern browser (Chrome, Firefox, Edge, Brave)
+* That's it
+
+## Limitations
+
+* Uses undocumented OpenAI endpoints that may change without notice
+* Large accounts (1000+ conversations) may take 15-30 minutes
+* Rate limiting may occur — the tool handles this automatically with retry logic
+* This tool is not affiliated with OpenAI or Anthropic
+* OpenAI's Terms of Use prohibit automated data extraction — see [our FAQ](https://gpt2claude.com/#faq) for details
+
+## Contributing
+
+Found a bug? Endpoint changed? PRs welcome. This is a community tool.
+
+## License
+
+MIT — do whatever you want with it.
+
+---
+
+**Built with [Claude](https://claude.ai) by [Siamsnus](https://www.siamsnus.com)** · **[gpt2claude.com](https://gpt2claude.com)**
+</file>
+
+</files>

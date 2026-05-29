@@ -1,0 +1,52 @@
+{
+  "name": "gateway",
+  "private": true,
+  "version": "8.4.4",
+  "description": "Internal Agentic platform API gateway.",
+  "author": "Travis Fischer <travis@transitivebullsh.it>",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/transitive-bullshit/agentic.git",
+    "directory": "apps/gateway"
+  },
+  "type": "module",
+  "source": "./src/worker.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --env production --outdir dist --upload-source-maps --var SENTRY_RELEASE:$(sentry-cli releases propose-version)",
+    "deploy:cf": "wrangler deploy --env production --outdir dist --upload-source-maps",
+    "cf-clear-cache": "del .wrangler",
+    "clean": "del dist",
+    "test": "run-s test:*",
+    "test:typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "sentry:sourcemaps": "_SENTRY_RELEASE=$(sentry-cli releases propose-version) && sentry-cli releases new $_SENTRY_RELEASE --org=agentic-platform --project=gateway && sentry-cli sourcemaps upload --org=agentic-platform --project=gateway --release=$_SENTRY_RELEASE --strip-prefix 'dist/..' dist",
+    "postdeploy": "pnpm sentry:sourcemaps"
+  },
+  "dependencies": {
+    "@agentic/json-schema": "workspace:*",
+    "@agentic/platform-api-client": "workspace:*",
+    "@agentic/platform-core": "workspace:*",
+    "@agentic/platform-hono": "workspace:*",
+    "@agentic/platform-types": "workspace:*",
+    "@agentic/platform-validators": "workspace:*",
+    "@hono/zod-validator": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@sentry/cloudflare": "catalog:",
+    "agents": "catalog:",
+    "fast-content-type-parse": "catalog:",
+    "hono": "catalog:",
+    "ky": "catalog:",
+    "plur": "catalog:",
+    "sort-keys": "catalog:",
+    "stripe": "catalog:",
+    "type-fest": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@edge-runtime/vm": "catalog:",
+    "@sentry/cli": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

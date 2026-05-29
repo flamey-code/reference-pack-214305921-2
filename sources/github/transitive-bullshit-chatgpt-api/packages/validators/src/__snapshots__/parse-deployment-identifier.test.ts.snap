@@ -1,0 +1,384 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 1`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 2`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 3`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 4`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 5`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 6`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 7`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 8`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@dev",
+  "deploymentVersion": "dev",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 9`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@1.0.0",
+  "deploymentVersion": "1.0.0",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 10`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 11`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 12`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 13`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 14`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 15`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 16`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 17`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 18`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 19`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 20`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@dev",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 21`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@1.0.0",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 22`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 23`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 24`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > non-strict mode valid 25`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+  "toolName": "foo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 1`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 2`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foo-bar@01234567",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 3`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 4`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@dev",
+  "deploymentVersion": "dev",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 5`] = `
+{
+  "deploymentIdentifier": "@username/foo-bar@1.0.0",
+  "deploymentVersion": "1.0.0",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 6`] = `
+{
+  "deploymentHash": "abc123lz",
+  "deploymentIdentifier": "@username/foo-bar@abc123lz",
+  "projectIdentifier": "@username/foo-bar",
+  "projectNamespace": "username",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 7`] = `
+{
+  "deploymentHash": "01234567",
+  "deploymentIdentifier": "@username/foobar123-yo@01234567",
+  "projectIdentifier": "@username/foobar123-yo",
+  "projectNamespace": "username",
+  "projectSlug": "foobar123-yo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 8`] = `
+{
+  "deploymentIdentifier": "@u/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@u/foo-bar",
+  "projectNamespace": "u",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 9`] = `
+{
+  "deploymentIdentifier": "@a/foo-bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@a/foo-bar",
+  "projectNamespace": "a",
+  "projectSlug": "foo-bar",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 10`] = `
+{
+  "deploymentIdentifier": "@foo/foobar123-yo@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@foo/foobar123-yo",
+  "projectNamespace": "foo",
+  "projectSlug": "foobar123-yo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 11`] = `
+{
+  "deploymentIdentifier": "@foo/foobar123-yo@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@foo/foobar123-yo",
+  "projectNamespace": "foo",
+  "projectSlug": "foobar123-yo",
+}
+`;
+
+exports[`parseDeploymentIdentifier > strict mode valid 12`] = `
+{
+  "deploymentIdentifier": "@foo/bar@latest",
+  "deploymentVersion": "latest",
+  "projectIdentifier": "@foo/bar",
+  "projectNamespace": "foo",
+  "projectSlug": "bar",
+}
+`;

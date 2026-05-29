@@ -1,0 +1,47 @@
+{
+  "name": "@agentic/platform-e2e-tests",
+  "private": true,
+  "version": "8.4.4",
+  "description": "Internal Agentic platform E2E tests.",
+  "author": "Travis Fischer <travis@transitivebullsh.it>",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/transitive-bullshit/agentic.git",
+    "directory": "apps/e2e"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy-fixtures": "dotenvx run -- tsx bin/deploy-fixtures.ts",
+    "deploy-fixtures:prod": "dotenvx run -o -f .env.production -- tsx bin/deploy-fixtures.ts",
+    "publish-fixtures": "dotenvx run -- tsx bin/publish-fixtures.ts",
+    "publish-fixtures:prod": "dotenvx run -o -f .env.production -- tsx bin/publish-fixtures.ts",
+    "seed-db": "dotenvx run -- tsx bin/seed-db.ts",
+    "seed-db:prod": "dotenvx run -o -f .env.production -- tsx bin/seed-db.ts",
+    "test": "run-s test:*",
+    "test:typecheck": "tsc --noEmit",
+    "e2e": "dotenvx run -- vitest run",
+    "e2e-http": "dotenvx run -- vitest run src/http-e2e.test.ts",
+    "e2e-mcp": "dotenvx run -- vitest run src/mcp-e2e.test.ts",
+    "e2e:prod": "dotenvx run -o -f .env.production -- vitest run",
+    "e2e-http:prod": "dotenvx run -o -f .env.production -- vitest run src/http-e2e.test.ts",
+    "e2e-mcp:prod": "dotenvx run -o -f .env.production -- vitest run src/mcp-e2e.test.ts"
+  },
+  "dependencies": {
+    "dotenv": "catalog:",
+    "ky": "catalog:",
+    "p-map": "catalog:",
+    "p-times": "catalog:",
+    "semver": "catalog:"
+  },
+  "devDependencies": {
+    "@agentic/platform": "workspace:*",
+    "@agentic/platform-api-client": "workspace:*",
+    "@agentic/platform-core": "workspace:*",
+    "@agentic/platform-fixtures": "workspace:*",
+    "@agentic/platform-types": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/semver": "catalog:",
+    "fast-content-type-parse": "catalog:"
+  }
+}

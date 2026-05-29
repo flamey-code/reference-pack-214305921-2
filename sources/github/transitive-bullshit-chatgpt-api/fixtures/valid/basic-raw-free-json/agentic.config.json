@@ -1,0 +1,7 @@
+{
+  "name": "test-basic-raw-free-json",
+  "origin": {
+    "type": "raw",
+    "url": "https://jsonplaceholder.typicode.com"
+  }
+}

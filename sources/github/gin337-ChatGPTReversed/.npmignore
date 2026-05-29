@@ -1,0 +1,10 @@
+/src
+/node_modules
+
+.env
+
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+/tests
+/.github

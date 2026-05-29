@@ -1,0 +1,93 @@
+## API Gateway
+
+- **MCP**: `https://gateway.agentic.so/@{username}/{project-slug}/mcp`
+- **HTTP**: `GET/POST` `https://gateway.agentic.so/@{username}/{project-slug}/{tool-name}`
+
+## TODO: Post-MVP
+
+- **website**
+  - llms.txt for all projects
+  - handle browser back/forward with `?next=`
+  - add some social proof to signup page
+- api gateway stress tests
+- auth
+  - custom auth provider configs for projects/deployments
+- stripe
+  - declarative json-based pricing
+    - like Saasify and https://github.com/tierrun/tier
+    - https://github.com/tierrun/tier/blob/main/pricing/schema.json
+    - https://blog.tier.run/tier-hello-world-demo
+- re-add support for teams / organizations
+- consider switching to [consola](https://github.com/unjs/consola) for logging?
+- consider switching to `bun` (for `--hot` reloading!!)
+- validate stability of pricing plan slugs across deployments
+  - same for pricing plan line-items
+- replace `ms` package
+- **API gateway**
+  - SSE support? (no; post-mvp if at all; only support [streamable http](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) like smithery does, or maybe support both?)
+  - signed requests
+  - add support for custom headers on responses
+  - add ability to only report stripe usage on non-cached requests
+  - add support for ToolConfig.cost defaulting to 1, to easily support tools which cost multiple "credits"
+  - extra `Sentry` instrumentation (`setUser`, `captureMessage`, etc)
+  - test handling of binary bodies and responses
+  - improve logger vs console for non-hono path and util methods
+  - consider replacing `eventId` with uuids for `requestId`?
+  - openapi origin kitchen sink
+    - add more test cases to e2e tests for diff content types
+  - mcp origin kitchen sink
+  - add support for `/sse`? need to test with claude desktop
+  - test handling of resources
+- `@agentic/platform-hono`
+  - fix sentry middleware
+    - https://github.com/honojs/middleware/blob/main/packages/sentry/src/index.ts
+    - https://github.com/honojs/middleware/issues/943
+    - https://github.com/getsentry/sentry-javascript/tree/master/packages/cloudflare
+- **Origin MCP servers**
+  - how to guarantee that the request is coming from agentic?
+    - `_meta` for tool calls
+    - _still need a way of doing this for initial connection requests_
+    - _=> ask in the official mcp developers discord_
+  - mcp auth provider support
+  - test binary bodies / responses / mcp resources
+  - resources
+  - prompts
+  - other MCP features?
+- additional transactional emails
+- handle or validate against dynamic MCP origin tools
+- upgrade to zod v4
+- decide whether deployment fields like `defaultRateLimit` and others should be generated and stored in the db, or should be inferred based on `undefined` values
+- support multiple rate-limits by slug
+  - RateLimit-Policy: "burst";q=100;w=60,"daily";q=1000;w=86400
+  - https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/
+- handle hosting of deployment and user images
+- about page inspiration: https://mastra.ai/about
+- simplify overlap between `@agentic/core` and `@agentic/platform-core`
+- consider simplifying `AgenticToolClient` to only require one package per TS LLM SDK
+  - `createAISDKToolsFromIdentifier(projectIdentifier)`
+- consider allowing deployments to specify their proxy secret instead of a single, per-project proxy secret
+- add docs on using multiple tools with `AIFunctionSet`
+- add support for `crewai`
+- add scroll appearance motion to hero animation
+- add ts sdk examples to e2e tests
+- add feature about optimized context to docs
+- import react example usage component into docs
+- add [ping](https://modelcontextprotocol.io/specification/2025-03-26/basic/utilities/ping) support to mcp servers
+- fix readme css <img height="..."> not taking effect because of tailwind css preflight which sets `img, video { height: auto }`
+  - we still want this for every other scenario; just want to sandbox the github-style readme markdown css...
+- add `--llm` flag to cli (https://x.com/badlogicgames/status/1940370344990441726)
+- support claude Desktop Extensions ([DXT](https://github.com/anthropics/dxt)) ([post](https://www.anthropic.com/engineering/desktop-extensions))
+- add mcp-remote to support stdio-only mcp clients like claude desktop
+- add docs on how to use with [chatgpt's mcp custom connectors](https://platform.openai.com/docs/mcp) ([requires pro account or team/enterprise/edu workspace](https://help.openai.com/en/articles/11487775-connectors-in-chatgpt#h_d2a53d4230))
+- add support for enterprise / custom / contact us pricing
+- consider changing homepage hero CTA to include publishing
+- docs: add notes about constraints on mcp origin servers (static tools)
+- analytics dashboard
+- UX onboarding
+- visual pricing plan config + previews
+- marketplace public project detail page
+  - add breadcrumb nav: marketplace > @agentic > search
+  - add last published date somewhere
+  - tool input/output schemas; move `$schema` to the top
+  - break out into a few subcomponents; some can be server components
+  - mcp inspector

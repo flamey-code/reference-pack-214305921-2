@@ -1,0 +1,172 @@
+"""Main CLI application entry point.
+
+This module defines the Typer application and main() entry point for
+the echomine CLI tool.
+
+Architecture:
+    - Typer application with registered commands
+    - main() function as entry point (referenced in pyproject.toml)
+    - Minimal error handling (commands handle their own errors)
+
+Constitution Compliance:
+    - Principle I: Library-first (CLI delegates to library)
+    - CHK031: stdout/stderr separation
+    - CHK032: Exit codes 0/1/2
+
+Entry Point Configuration (pyproject.toml):
+    [project.scripts]
+    echomine = "echomine.cli.app:main"
+
+Usage:
+    # As installed script
+    $ echomine list export.json
+
+    # As Python module (development)
+    $ python -m echomine.cli.app list export.json
+"""
+
+from __future__ import annotations
+
+import sys
+from typing import Annotated
+
+import typer
+
+from echomine import __version__
+from echomine.cli.commands.export import export_conversation
+from echomine.cli.commands.get import get_app
+from echomine.cli.commands.list import list_conversations
+from echomine.cli.commands.search import search_conversations
+from echomine.cli.commands.stats import stats_command
+
+
+# Create Typer application
+app = typer.Typer(
+    name="echomine",
+    help="[bold cyan]Library-first tool for parsing AI conversation exports[/bold cyan]",
+    epilog="""[bold]Examples:[/bold]
+  [dim]# List all conversations[/dim]
+  [green]echomine list[/green] export.json
+
+  [dim]# Get conversation by ID[/dim]
+  [green]echomine get conversation[/green] export.json [yellow]<conversation-id>[/yellow]
+
+  [dim]# List all messages in a conversation[/dim]
+  [green]echomine get messages[/green] export.json [yellow]<conversation-id>[/yellow]
+
+  [dim]# Get message by ID[/dim]
+  [green]echomine get message[/green] export.json [yellow]<message-id>[/yellow]
+
+  [dim]# Search by keywords[/dim]
+  [green]echomine search[/green] export.json [cyan]-k[/cyan] python,algorithm
+
+  [dim]# Filter by title and date range[/dim]
+  [green]echomine search[/green] export.json [cyan]-t[/cyan] "Debug" [cyan]--from-date[/cyan] 2024-01-01
+
+  [dim]# Export conversation to markdown[/dim]
+  [green]echomine export[/green] export.json [yellow]<conversation-id>[/yellow] [cyan]--output[/cyan] chat.md
+
+[dim]For more help:[/dim] [green]echomine COMMAND --help[/green]""",
+    add_completion=False,  # Disable shell completion for simplicity
+    no_args_is_help=False,  # Handled manually in callback to support --version
+    pretty_exceptions_enable=False,  # Disable pretty exceptions for simpler output
+    rich_markup_mode="rich",  # Enable Rich markup for colorful output
+)
+
+
+# Add callback to prevent command collapsing and handle global flags
+# This ensures "list" remains a subcommand even though it's the only command
+@app.callback(invoke_without_command=True)
+def callback(
+    ctx: typer.Context,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-v",
+            help="Show version and exit",
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
+    """Echomine CLI - Library-first tool for parsing AI conversation exports."""
+    if version:
+        typer.echo(f"echomine version {__version__}")
+        raise typer.Exit(0)
+
+    # Show help if no command provided (unless --version was used)
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit(0)
+
+
+# Register commands with Rich-styled help text
+app.command(name="list", help="[cyan]List[/cyan] all conversations from export file")(
+    list_conversations
+)
+app.add_typer(get_app, name="get")  # Hierarchical command group (conversation, message)
+app.command(name="search", help="[cyan]Search[/cyan] conversations by keywords")(
+    search_conversations
+)
+app.command(name="export", help="[cyan]Export[/cyan] conversation to markdown format")(
+    export_conversation
+)
+app.command(name="stats", help="[cyan]Display[/cyan] export-level statistics")(stats_command)
+
+
+def _configure_encoding() -> None:
+    """Configure stdout/stderr for UTF-8 on Windows.
+
+    Windows uses cp1252 (charmap) by default which can't handle Unicode.
+    This reconfigures streams to use UTF-8 with 'replace' error handling
+    to avoid UnicodeEncodeError on special characters.
+    """
+    import io  # pragma: no cover
+
+    # Only reconfigure if not already UTF-8 (common on Windows)
+    if sys.stdout.encoding.lower() != "utf-8":  # pragma: no cover
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    if sys.stderr.encoding.lower() != "utf-8":  # pragma: no cover
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
+
+def main() -> None:
+    """Entry point for CLI application.
+
+    This function is referenced in pyproject.toml as the console script
+    entry point. It invokes the Typer app and handles any uncaught
+    exceptions (though commands should handle their own errors).
+
+    Exit Codes:
+        0: Success
+        1: Error (user error, file not found, parse error, etc.)
+        2: Invalid arguments (Typer handles this)
+
+    Requirements:
+        - CHK032: Consistent exit codes
+        - Entry point for installed script
+    """
+    # Configure UTF-8 encoding for Windows compatibility
+    _configure_encoding()
+
+    try:
+        app()
+    except typer.Exit:  # pragma: no cover
+        # typer.Exit exceptions are raised by commands to set exit codes
+        # Re-raise to preserve exit code
+        raise
+    except KeyboardInterrupt:  # pragma: no cover
+        # User interrupted with Ctrl+C (FR-062)
+        # Exit with code 130 (standard for SIGINT: 128 + 2)
+        typer.echo("", err=True)
+        sys.exit(130)
+    except Exception as e:  # pragma: no cover
+        # Unexpected error not caught by command
+        # This is a safety net - commands should handle their own errors
+        typer.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+# Allow running as module: python -m echomine.cli.app
+if __name__ == "__main__":
+    main()

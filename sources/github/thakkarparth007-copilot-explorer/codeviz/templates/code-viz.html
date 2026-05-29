@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Copilot Inspector</title>
+    <style type="text/css">
+        html, body {
+            margin: 0;
+            padding: 0;
+        }
+        #main {
+            /* display: flex; */
+            /* flex-direction: row; */
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+        }
+        #left-panel {
+            position: relative;
+        }
+        #network-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            /* width: 35%; */
+            /* height: 35px; */
+            z-index: 100;
+        }
+        #mynetwork {
+            /* width: 35%; */
+            height: 100vh;
+            border-right: 1px solid darkgray;
+        }
+        #code-block {
+            /* width: 75%; */
+            height: 100vh;
+            overflow: auto;
+        }
+        #module-info-wrapper {
+            /* width: 25%; */
+            height: 100vh;
+            overflow: auto;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+        .module-category-color-box {
+            width: 10px;
+            height: 10px;
+            display: inline-block;
+            /* margin: 5px 5px -5px 0; */
+        }
+        #show-modules-with-category-fieldset {
+            background-color: white;
+            opacity: 0.8;
+        }
+
+        /* description decorations */
+        .description-glyph {
+            background: darkcyan;
+        }
+        .description {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .split-grid {
+            display: grid;
+            /* grid-template-columns: 1fr 10px 1fr 10px 1fr; */
+            grid-template-columns: 1fr 5px 2fr 5px 0.75fr;
+        }
+
+        .gutter-col {
+            grid-row: 1/-1;
+            cursor: col-resize;
+            background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAeCAYAAADkftS9AAAAIklEQVQoU2M4c+bMfxAGAgYYmwGrIIiDjrELjpo5aiZeMwF+yNnOs5KSvgAAAABJRU5ErkJggg==);
+            background-color: rgb(229, 231, 235);
+            background-repeat: no-repeat;
+            background-position: 50% center;
+            width: 5px;
+        }
+
+        .gutter-col-1 {
+            grid-column: 2;
+        }
+
+        .gutter-col-3 {
+            grid-column: 4;
+        }
+    </style>
+
+    <!-- Select2 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/css/select2.min.css" rel="stylesheet" />
+
+    <!-- monaco -->
+    <link rel="stylesheet" data-name="vs/editor/editor.main"
+    href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/editor/editor.main.min.css">
+</head>
+
+<body>
+    <div id="main" class="split-grid">
+        <div id="left-panel">
+            <div id="network-overlay">
+                <div>
+                    <name for="physics-enabled-checkbox">Enable Physics:</name>
+                    <input type="checkbox" id="physics-enabled-checkbox" />
+                </div>
+                <!-- <name for="hide-uninteresting-modules">Hide uninteresting modules:</name> -->
+                <!-- <input type="checkbox" id="hide-uninteresting-modules" checked /> -->
+                <fieldset id="show-modules-with-category-fieldset">
+                    <legend>Show selected module types:</legend>
+                    <!-- <input type="checkbox" name="show-modules-with-category" value="$unk$"> -->
+                </fieldset>
+            </div>
+            <div id="mynetwork"></div>
+        </div>
+        <div class="gutter-col gutter-col-1"></div>
+        <!-- <div id="info-panel"> -->
+            <div id="code-block">
+
+            </div>
+            <div class="gutter-col gutter-col-3"></div>
+            <div id="module-info-wrapper">
+                <name for="module-dropdown">Module</name>
+                <select id="module-dropdown">
+                    <option value="$unk$">Select a module</option>
+                </select>
+                <br>
+                <name for="module-name">Module Name:</name>
+                <input id="module-name" type="text" placeholder="Module name" />
+                <br>
+                <!-- <name for="module-interesting">Interesting:</name> -->
+                <!-- <input id="module-interesting" type="checkbox" /> -->
+                <name for="selected-module-category-dropdown">Module Category:</name>
+                <select id="selected-module-category-dropdown">
+                    <option value="$unk$">Unclassified</option>
+                </select>
+                <div id="module-info">
+                    Module info
+                </div>
+            </div>
+        <!-- </div> -->
+    </div>
+    <script type="text/javascript" src="../data/module_deps.js"></script>
+    <script type="text/javascript" src="../data/module_codes_renamed.js"></script>
+    <script type="text/javascript" src="../data/annotated_module_codes.js"></script>
+    <script type="text/javascript" src="../data/module_categories.js"></script>
+    <script type="text/javascript" src="../data/gold_and_predicted_annotations.js"></script>
+    <!-- <script type="text/javascript" src="../data/predicted_annotations.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <!-- Select2 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/js/select2.min.js"></script>
+    <!-- Split-grid.js -->
+    <script src="https://unpkg.com/split-grid/dist/split-grid.js"></script>
+    <script type="text/javascript">
+        Split({
+            columnGutters: [{
+                track: 1,
+                element: document.querySelector('.gutter-col-1'),
+            }, {
+                track: 3,
+                element: document.querySelector('.gutter-col-3'),
+            }],
+        });
+
+        
+        if (localStorage.getItem("physics_enabled") === null) {
+            localStorage.setItem("physics_enabled", true);
+        }
+        // sync checkbox
+        $("#physics-enabled-checkbox").prop("checked", localStorage.getItem("physics_enabled") === "true");
+        
+        $("#physics-enabled-checkbox").change(function() {
+            localStorage.setItem("physics_enabled", $(this).prop("checked"));
+            location.reload();
+        });
+    </script>
+    <script type="text/javascript">
+        // load and store annotations
+        function getAnnotations(module_id) {
+            let annotIdent = "module-annotations-" + module_id;
+            let annotation = localStorage.getItem(annotIdent);
+            if (annotation === null) {
+                return gold_and_predicted_annotations[annotIdent] || {};
+            } else {
+                return JSON.parse(annotation);
+            }
+        }
+        function getAnnotation(module_id, key) {
+            return getAnnotations(module_id)[key];
+        }
+
+        function setAnnotation(module_id, key, value) {
+            annotations = getAnnotations(module_id);
+            annotations[key] = value;
+            localStorage.setItem("module-annotations-" + module_id, JSON.stringify(annotations));
+        }
+
+        // apply gold annotations to localstorage - maybe this isn't the best thing to do.
+        // Will overwrite any local changes if the gold annotations change. :(
+        try {
+            // merge entries from gold annotations into localstorage if not already there
+            let changes = false;
+            for (var key in gold_and_predicted_annotations) {
+                let stored = localStorage.getItem(key);
+                if (stored === null) {
+                    // merge keys
+                    for (let [annot, val] of Object.entries(gold_and_predicted_annotations[key])) {
+                        if (stored[annot] === undefined) {
+                            // only overwrite if not already set
+                            stored[annot] = val;
+                            changes = true;
+                        } else if (stored[annot] !== val) {
+                            console.log(`Annotation mismatch for ${key}: gold=${val}, local=${stored[annot]} (for module ${key.split("-")[2]})`);
+                        }
+                    }
+                    localStorage.setItem(key, JSON.stringify(stored));
+                }
+            }
+            if (changes) {
+                console.log("Merged gold annotations into localstorage");
+            } else {
+                console.log("No changes to annotations in localstorage");
+            }
+        } catch (e) {
+            // do nothing
+        }
+    </script>
+    <script type="text/javascript">
+        
+        // fill the select box with the module names
+        var moduleDropdown = $('#module-dropdown');
+        for (let module_id of Object.keys(module_deps_data)) {
+            let module_name = getAnnotation(module_id, "name") || module_id;
+            let module_category = getAnnotation(module_id, "category") || "$unk$";
+            let module_display_name = module_name + "(" + module_id + ")";
+            if (module_name == module_id) {
+                module_display_name = module_id + "(" + module_deps_data[module_id].lines + " LOC)";
+            }
+            var newOption = new Option(
+                module_display_name, module_id, false, false
+            );
+            newOption.id = "module-option-" + module_id;
+            moduleDropdown.append(newOption)
+        }
+
+        $(moduleDropdown).select2();
+
+        // populate the module categories select box
+        var showModulesWithSelectedCategoriesFieldSet = $('#show-modules-with-category-fieldset');
+        var showModulesWithSelectedCategories = $("input[name='show-modules-with-category']");
+        var selectedModuleCategoryDropdown = $('#selected-module-category-dropdown');
+        
+        /********* Color stuff *********/
+        var moduleCategoryColors = {}; // map from category to color
+        var MAIN_COLOR = "#d11141";
+        var NOT_INTERESTING_COLOR = "lightgray"
+        var allColors = ["#00b159", "#00aedb", "#f37735", "#ffc425", "#58668b", "#f9caa7", "yellow", "#d0e1f9"];
+        function getSelectedModuleCategories() {
+            return $("input[name='show-modules-with-category']").filter(function() {
+                return this.checked;
+            }).map(function() {
+                return this.value;
+            }).get();
+        }
+        function getColorOfNode(node) {
+            if (node.id == "main") {
+                return MAIN_COLOR;
+            }
+            let is_interesting = getSelectedModuleCategories().includes(node.category);
+            if (is_interesting) {
+                return moduleCategoryColors[node.category];
+            }
+            return NOT_INTERESTING_COLOR;
+        }
+        function getCategoryColorBox(categoryId) {
+            return `<span class='module-category-color-box' style='background-color: ${moduleCategoryColors[categoryId]}'></span>`;
+        }
+        module_categories["$unk$"] = "Unclassified";
+        /********* /Color stuff *********/
+
+        for (let [category_id, category_name] of Object.entries(module_categories)) {
+            moduleCategoryColors[category_id] = allColors.shift();
+            let currColor = moduleCategoryColors[category_id];
+
+            var newOption = $(`
+                <span style='white-space: nowrap; display: inline-block'>
+                    <input type='checkbox' name='show-modules-with-category' value='${category_id}' checked='checked'>
+                    ${getCategoryColorBox(category_id)}
+                    ${category_name}
+                </span>
+            `)
+            // newOption.attr("id", "show-module-category-option-" + category_id);
+            showModulesWithSelectedCategoriesFieldSet.append(newOption);
+
+            var newOption2 = new Option(
+                category_name, category_id, false, false
+            );
+            newOption2.id = "module-category-option-" + category_id;
+            selectedModuleCategoryDropdown.append(newOption2);
+
+        }
+        $(selectedModuleCategoryDropdown).select2({
+            templateResult: function (state) {
+                if (!state.id) {
+                    return state.text;
+                }
+                var $state = $(
+                    `<span>${getCategoryColorBox(state.id)} ` + state.text + "</span>"
+                );
+                return $state;
+            },
+            templateSelection: function (state) {
+                if (!state.id) {
+                    return state.text;
+                }
+                var $state = $(
+                    `<span>${getCategoryColorBox(state.id)} ` + state.text + "</span>"
+                );
+                return $state;
+            }
+        });
+    </script>
+    <!-- viz.js -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <!-- monaco -->
+    <script>var require = { paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs' } };</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/loader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/editor/editor.main.nls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/editor/editor.main.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/basic-languages/javascript/javascript.min.js"></script>
+    <script type="text/javascript">
+        /* Graph data */
+        var raw_nodes = Object.entries(module_deps_data).map(
+            ([key, value]) => ({
+                id: key,
+                name: getAnnotation(key, "name") || key,
+                label: getAnnotation(key, "name") || key,
+                importedBy: value.importedBy,
+                exports: value.exports,
+                lines: value.lines,
+                deps: [],
+                category: getAnnotation(key, "category") || "$unk$",
+                // is_interesting: value.is_interesting,
+                // hidden: !value.is_interesting
+            })
+        );
+        // update code from local storage
+        for (let node of raw_nodes) {
+            //module_codes_data[node.id] = getAnnotation(node.id, "code") || module_codes_data[node.id];
+            module_codes_data[node.id] = getAnnotation(node.id, "code") || (annotated_module_codes_data[node.id] || module_codes_data[node.id]);
+        }
+        var nodes = new vis.DataSet(raw_nodes);
+        // add colors
+        for (let node of nodes.get()) {
+            nodes.update({id: node.id, color: getColorOfNode(node)});
+        }
+
+        var raw_edges = [];
+        for (const [key, value] of Object.entries(module_deps_data)) {
+            if (!nodes.get(key)) {
+                // library dependency
+                console.log("Node not found: " + key);
+                continue;
+            }
+            nodes.get(key).deps = value.deps;
+            for (const dep of value.deps) {
+                if (!nodes.get(dep)) {
+                    if (dep.startsWith('"') && dep.endsWith('"')) {
+                        // library dependency
+                        continue;
+                    }
+                    console.log("Missing dependency: " + dep);
+                    continue;
+                }
+                // edge is only interesting if dep is interesting
+                let is_interesting = getColorOfNode(nodes.get(dep)) != NOT_INTERESTING_COLOR;
+                raw_edges.push({
+                    from: key,
+                    to: dep,
+                    arrows: 'to',
+                    color: {
+                        color: is_interesting ? "black" : "lightgray",
+                        // highlight: 'green'
+                    }
+                });
+            }
+        }
+
+        var edges = new vis.DataSet(raw_edges);
+
+        // create a network
+        var container = document.getElementById("mynetwork");
+        var data = {
+            nodes: nodes,
+            edges: edges,
+        };
+        var options = {
+            layout: {
+                // improvedLayout: false,
+                // hierarchical: {
+                //   direction: "DU",
+                //   sortMethod: "directed",
+                // },
+            },
+            physics: {
+                adaptiveTimestep: true,
+                barnesHut: {
+                    gravitationalConstant: -8000,
+                    springConstant: 0.04,
+                    springLength: 95
+                },
+                stabilization: {
+                    iterations: 75,
+                },
+                enabled: localStorage.getItem("physics_enabled") === "true"
+            },
+            nodes: { font: { size: 14 }},
+        };
+        var network = new vis.Network(container, data, options);
+
+        network.on("click", function (params) {
+            params.event = "[original event]";
+            let selectedNode = params.nodes[0];
+            if (selectedNode === undefined) {
+                return;
+            }
+
+            displayModule(selectedNode, false);
+        });
+
+        // function collapseNode(node) {
+        //     if (node.collapsed) {
+        //         return;
+        //     }
+        //     node.collapsed = true;
+        //     node._orig_color = node.color;
+        //     node.color = 'grey';
+        //     nodes.update(node);
+        //     try {
+        //         for (const dep of node.deps) {
+        //             if (!nodes.get(dep)) {
+        //                 // library dependency
+        //                 continue;
+        //             }
+        //             nodes.update({id: dep, hidden: true});
+        //             collapseNode(nodes.get(dep));
+        //         }
+        //     } catch (e) {
+        //         console.log(e, node);
+        //         throw e;
+        //     }
+        // }
+
+        // function expandNode(node) {
+        //     node.collapsed = false;
+        //     node.color = node._orig_color;
+        //     nodes.update(node);
+        //     for (const dep of node.deps) {
+        //         if (!nodes.get(dep)) {
+        //             // library dependency
+        //             continue;
+        //         }
+        //         nodes.update({id: dep, hidden: false});
+        //         // expandNode(nodes.get(dep));
+        //     }
+        // }
+
+        // network.on("doubleClick", function (params) {
+        //     console.log("Double click");
+        //     params.event = "[original event]";
+        //     let selectedNode = params.nodes[0];
+        //     if (selectedNode === undefined) {
+        //         return;
+        //     }
+
+        //     // on right click, we collapse/expand the node
+        //     // while collapsing, we hide all the dependencies and edges,
+        //     // and mark the node as collapsed
+        //     // while expanding we undo the above
+
+        //     let node = nodes.get(selectedNode);
+        //     if (node.collapsed) {
+        //         expandNode(node);
+        //     } else {
+        //         collapseNode(node);
+        //     }
+        // });
+
+        function highlightSelectedModule(module_id, old_module_id) {
+            if (old_module_id !== undefined) {
+                var old_node = network.body.nodes[old_module_id];
+                old_node.setOptions({
+                    font: {
+                        size: options.nodes.font.size
+                    }
+                });
+            }
+
+            var node = network.body.nodes[module_id];
+            node.setOptions({
+                font: {
+                    size: 20
+                },
+                color: {
+                    // background: 'yellow',
+                    border: 'black',
+                    highlight: {
+                        background: 'cyan',
+                        border: 'black'
+                    }
+                }
+            });
+        }
+
+        window.onpopstate = function (event) {
+            if (event.state !== null) {
+                displayModule(event.state.module_id, true, event.state);
+            }
+        };
+
+        function parseHash() {
+            let hashParts = window.location.hash.split("&");
+            let module_id = hashParts[0].substring(2);
+            let position = {
+                lineNumber: 1,
+                column: 1
+            };
+            if (hashParts.length > 1) {
+                let pos = hashParts[1].split("=")[1].split(":");
+                position = {
+                    lineNumber: parseInt(pos[0]),
+                    column: parseInt(pos[1])
+                };
+            }
+            return {
+                module_id: module_id || "main",
+                position: position
+            };
+        }
+
+        function makeHash(module_id, lineNo, colNo) {
+            lineNo = lineNo || 1;
+            colNo = colNo || 1;
+            return `#m${module_id}&pos=${lineNo}:${colNo}`;
+        }
+
+        let curSelectedModule = undefined;
+        function displayModule(moduleId, dontUpdateHistory, displayState = {}) {
+            if (moduleId === curSelectedModule) {
+                return;
+            }
+            if (!dontUpdateHistory) {
+                // update url
+                //
+                if (window.history.state && window.history.state.module_id == curSelectedModule) {
+                    let pos = editor.getPosition();
+                    window.history.replaceState({
+                        module_id: curSelectedModule,
+                        position: pos,
+                    }, '', makeHash(curSelectedModule, pos.lineNumber, pos.column));
+                }
+                let pos = displayState.position || {lineNumber: 1, column: 1};
+                window.history.pushState({
+                    module_id: moduleId,
+                    position: pos,
+                }, '', makeHash(moduleId, pos.lineNumber, pos.column));
+            }
+            network.selectNodes([moduleId]);
+            highlightSelectedModule(moduleId, curSelectedModule);
+            curSelectedModule = moduleId;
+
+            if ($("#module-dropdown").val() != moduleId) {
+                $("#module-dropdown").val(moduleId).trigger('change');
+            }
+            $("#module-name").val(nodes.get(moduleId).name);
+            // $("#module-interesting").prop("checked", nodes.get(moduleId).is_interesting);
+            if ($("#selected-module-category-dropdown").val() != nodes.get(moduleId).category) {
+                $("#selected-module-category-dropdown").val(nodes.get(moduleId).category || "$unk$").trigger('change');
+            }
+
+            editor.setValue(module_codes_data[moduleId]);
+            editor.setPosition(displayState.position || {lineNumber: 1, column: 1});
+            editor.revealPositionInCenter(displayState.position || {lineNumber: 1, column: 1});
+            editor.focus();
+            displayDescriptions(moduleId);
+            // // check if we have any existing monaco model showing this module
+            // // else, we need to load the model
+            // ensureRequiredModelsExist(moduleId);
+            // editor.setModel(models[moduleId]);
+            
+            // update module info using module_deps_data
+            // show module's exports, imports and modules that import this module
+            let moduleInfo = module_deps_data[moduleId];
+            let exports = moduleInfo.exports;
+            let imports = moduleInfo.deps;
+            let importedBy = moduleInfo.importedBy;
+
+            console.log(moduleId, "imports", imports);
+            let moduleInfoHtml = `
+                <div>
+                    <h3>Exports</h3>
+                    <ul>
+                        ${exports.map(e => `<li>${e}</li>`).join("")}
+                    </ul>
+                </div>
+                <div>
+                    <h3>Imports</h3>
+                    <ul>
+                        ${imports.map(e =>
+                            `<li>${getCategoryColorBox(nodes.get(e) ? nodes.get(e).category : '$unk$')}<a href='#m${e}&pos=1:1' onclick='displayModule("${e}")'>${nodes.get(e) ? nodes.get(e).name : e}</a></li>`
+                        ).join("")}
+                    </ul>
+                </div>
+                <div>
+                    <h3>Imported by</h3>
+                    <ul>
+                        ${importedBy.map(e =>
+                            `<li>${getCategoryColorBox(nodes.get(e) ? nodes.get(e).category : '$unk$')}<a href='#m${e}&pos=1:1' onclick='displayModule("${e}")'>${nodes.get(e) ? nodes.get(e).name : e}</a></li>`
+                        ).join("")}
+                    </ul>
+                </div>
+            `;
+
+            $("#module-info").html(moduleInfoHtml);
+        };
+
+        moduleDropdown.on('change', function () {
+            displayModule(this.value);
+        });
+
+        $("#module-name").change(function () {
+            let moduleId = moduleDropdown.val();
+            let node = nodes.get(moduleId);
+            let oldName = node.name;
+            node.name = this.value;
+            nodes.update(node);
+            $("#module-option-" + moduleId).text(this.value + " (" + moduleId + ")");
+            $("#module-dropdown").select2(); // refresh select2
+            setAnnotation(moduleId, "name", this.value);
+            // update all code that does require("module")
+            for (const importerId of node.importedBy) {
+                if (!nodes.get(importerId)) {
+                    // library dependency
+                    continue;
+                }
+                let oldCode = module_codes_data[importerId];
+                let newCode = oldCode.replace(
+                    new RegExp(`require\\((["']?${oldName}["']?|${moduleId})\\)`, 'g'),
+                    `require("${this.value}")`
+                );
+                module_codes_data[importerId] = newCode;
+                setAnnotation(importerId, "code", newCode);
+            }
+        });
+
+        // $("#module-interesting").change(function () {
+        //     let moduleId = moduleDropdown.val();
+        //     let node = nodes.get(moduleId);
+        //     node.is_interesting = this.checked;
+        //     node._orig_color = moduleId == "main" ? MAIN_COLOR : (
+        //         node.is_interesting ? INTERESTING_COLOR : NOT_INTERESTING_COLOR
+        //     );
+        //     node.color = node.color == 'cyan' ? node.color : node._orig_color;
+        //     nodes.update(node);
+        //     // should update the <option> element too but will do it later
+        //     setAnnotation(moduleId, "is_interesting", node.is_interesting);
+        // });
+        $("#selected-module-category-dropdown").change(function () {
+            let moduleId = moduleDropdown.val();
+            let node = nodes.get(moduleId);
+            if (node.category == this.value) {
+                return;
+            }
+            node.category = this.value;
+            node.color = getColorOfNode(node);
+            nodes.update(node);
+            setAnnotation(moduleId, "category", node.category);
+        });
+
+        $("input[name='show-modules-with-category']").change(function () {
+            // let hide = this.checked;
+            let selectedCategories = getSelectedModuleCategories();
+            for (const node of nodes.get()) {
+                if (node.id == "main") {
+                    continue;
+                }
+                node.color = getColorOfNode(node);
+                for (const dep of node.deps) {
+                    if (!nodes.get(dep)) {
+                        // library dependency
+                        continue;
+                    }
+                    let edge = raw_edges.find(e => e.from == node.id && e.to == dep);
+                    edge.color.color = getColorOfNode(nodes.get(dep)) != NOT_INTERESTING_COLOR ? "black" : "lightgray";
+                }
+            }
+            nodes.update(nodes.get());
+            edges.update(edges.get());
+        });
+
+        
+        /********** Code Viewer **********/
+        let editor = monaco.editor.create($('#code-block').get(0), {
+            value: "function hello() {\n\talert('Hello world!');\n}",
+            language: 'javascript',
+            theme: 'vs-dark',
+            readOnly: false,
+            automaticLayout: true,
+            minimap: {
+                enabled: false
+            },
+            wordWrap: 'on',
+            glyphMargin: true,
+        });
+
+        /****** Load initial module ******/
+        // hash format: #m<module_id>&pos=<line>:<column>
+        let hashState = parseHash();
+        displayModule(hashState.module_id, false, hashState);
+
+        /****** Snippet description ******/
+        async function describeSnippet(snippet) {
+            // get selected text
+            if (snippet == "") {
+                return;
+            }
+            let payload = {
+                module_id: moduleDropdown.val(),
+                module_name: $("#module-name").val(),
+                snippet: snippet,
+            }
+
+            let response = await fetch("/api/describe_snippet", {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            let data = await response.json();
+            return data.description;
+        }
+
+        function displayDescriptions(moduleId) {
+            let descriptions = getAnnotation(moduleId, "descriptions");
+            if (!descriptions) {
+                return;
+            }
+            
+            let decorations = [];
+            for (const [selectionJSON, descriptionObj] of Object.entries(descriptions)) {
+                let selection = JSON.parse(selectionJSON);
+                let { snippet, description } = descriptionObj;
+                // check if the snippet is still the same
+                let snippetInEditor = editor.getModel().getValueInRange(selection);
+                if (!snippetInEditor || snippetInEditor.trim() != snippet.trim()) {
+                    continue;
+                }
+                let decoration = {
+                    range: selection,
+                    options: {
+                        isWholeLine: true,
+                        className: 'description',
+                        glyphMarginClassName: 'description-glyph',
+                        glyphMarginHoverMessage: { value: "```\n" + description + "\n```" },
+                        hoverMessage: { value: "```\n" + description + "\n```" },
+                    }
+                };
+                decorations.push(decoration);
+            }
+            
+            editor.deltaDecorations([], decorations);
+        }
+
+        // register action with the editor
+        editor.addAction({
+            id: 'describe-snippet',
+            label: 'Describe snippet',
+            keybindings: [
+                // 
+            ],
+            contextMenuGroupId: 'navigation',
+            contextMenuOrder: 1.5,
+            run: async function () {
+                let selection = editor.getSelection();
+                let snippet = editor.getModel().getValueInRange(selection);
+                let description = await describeSnippet(snippet);
+                
+                let storedDescriptions = getAnnotation(moduleDropdown.val(), "descriptions");
+                if (!storedDescriptions) {
+                    storedDescriptions = {};
+                }
+                storedDescriptions[JSON.stringify(selection)] = {
+                    snippet: snippet, // to check if the description is still valid
+                    description: description,
+                };
+                setAnnotation(moduleDropdown.val(), "descriptions", storedDescriptions);
+
+                displayDescriptions(moduleDropdown.val());
+            }
+        });
+    </script>
+</body>
+
+</html>

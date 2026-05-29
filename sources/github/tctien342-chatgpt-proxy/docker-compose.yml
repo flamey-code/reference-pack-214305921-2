@@ -1,0 +1,11 @@
+version: "3"
+services:
+  openai-proxy:
+    build: .
+    container_name: openai-proxy
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - API_TOKEN=
+      - AGENT_ROLL_INTERVAL=60000

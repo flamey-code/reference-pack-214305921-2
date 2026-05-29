@@ -1,0 +1,56 @@
+{
+  "name": "@agentic/cli",
+  "version": "8.4.4",
+  "description": "CLI for the Agentic platform.",
+  "author": "Travis Fischer <travis@transitivebullsh.it>",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/transitive-bullshit/agentic.git",
+    "directory": "packages/cli"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "module",
+  "source": "./src/cli.ts",
+  "bin": {
+    "agentic": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "del dist",
+    "test": "run-s test:*",
+    "test:typecheck": "tsc --noEmit",
+    "cli": "AGENTIC_API_BASE_URL=\"http://localhost:3001\" tsx ./src/cli.ts"
+  },
+  "dependencies": {
+    "@agentic/platform": "workspace:*",
+    "@agentic/platform-api-client": "workspace:*",
+    "@agentic/platform-core": "workspace:*",
+    "@agentic/platform-types": "workspace:*",
+    "@agentic/platform-validators": "workspace:*",
+    "@clack/prompts": "catalog:",
+    "@hono/node-server": "catalog:",
+    "commander": "catalog:",
+    "conf": "catalog:",
+    "exit-hook": "catalog:",
+    "get-port": "catalog:",
+    "hono": "catalog:",
+    "ky": "catalog:",
+    "open": "catalog:",
+    "ora": "catalog:",
+    "restore-cursor": "catalog:",
+    "semver": "catalog:"
+  },
+  "devDependencies": {
+    "@commander-js/extra-typings": "catalog:",
+    "@types/semver": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

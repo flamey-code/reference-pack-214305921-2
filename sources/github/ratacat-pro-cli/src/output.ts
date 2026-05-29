@@ -1,0 +1,116 @@
+import { ProError } from "./errors";
+
+export interface CliIO {
+  stdout: (text: string) => void;
+  stderr: (text: string) => void;
+  stdoutIsTTY: boolean;
+  env: Record<string, string | undefined>;
+  cwd: string;
+}
+
+export interface OutputMode {
+  json: boolean;
+}
+
+const FULL_RELAY_THRESHOLD_CHARS = 6_000;
+const APPROX_CHARS_PER_TOKEN = 4;
+
+export function writeSuccess(io: CliIO, mode: OutputMode, payload: unknown): void {
+  if (mode.json) {
+    io.stdout(`${JSON.stringify({ ok: true, data: withResultRelayInstruction(payload) })}\n`);
+    return;
+  }
+  io.stdout(`${renderText(payload)}\n`);
+}
+
+export function writeError(io: CliIO, mode: OutputMode, error: ProError): void {
+  if (mode.json) {
+    io.stderr(`${JSON.stringify({ ok: false, error: error.toPayload() })}\n`);
+    return;
+  }
+
+  const suggestions =
+    error.suggestions.length > 0 ? `\ntry: ${error.suggestions.join(" | ")}` : "";
+  io.stderr(`${error.code}: ${error.message}${suggestions}\n`);
+}
+
+export function renderText(payload: unknown): string {
+  if (typeof payload === "string") return payload;
+  if (!isRecord(payload)) return JSON.stringify(payload);
+  if (
+    "text" in payload &&
+    typeof payload.text === "string"
+  ) {
+    return payload.text;
+  }
+  if ("result" in payload && typeof payload.result === "string") {
+    return payload.result;
+  }
+  if ("steps" in payload && Array.isArray(payload.steps)) {
+    return renderSetup(payload);
+  }
+  if ("command" in payload && typeof payload.command === "string") {
+    const capture =
+      "captureCommand" in payload && typeof payload.captureCommand === "string"
+        ? `\n\nThen capture:\n${payload.captureCommand}`
+        : "";
+    return `Open ChatGPT:\n${payload.command}${capture}`;
+  }
+  if ("ready" in payload && "next" in payload && isRecord(payload.next)) {
+    const status = payload.ready ? "ready" : "not ready";
+    const command =
+      typeof payload.next.command === "string" ? `\nnext: ${payload.next.command}` : "";
+    return `pro-cli ${status}${command}`;
+  }
+  if ("version" in payload && typeof payload.version === "string" && "repoRoot" in payload) {
+    return `pro-cli updated\n${payload.version}`;
+  }
+  if ("job" in payload && isRecord(payload.job)) {
+    const id = typeof payload.job.id === "string" ? payload.job.id : "unknown";
+    const status = typeof payload.job.status === "string" ? payload.job.status : "unknown";
+    if ("wait" in payload && isRecord(payload.wait) && payload.wait.timedOut === true) {
+      const elapsed =
+        typeof payload.wait.elapsedMs === "number" ? ` after ${payload.wait.elapsedMs}ms` : "";
+      return `job ${id} still ${status}${elapsed}\nwait: pro-cli job wait ${id}`;
+    }
+    const resultHint =
+      status === "succeeded" ? `\nresult: pro-cli job result ${id}` : `\nwait: pro-cli job wait ${id}`;
+    return `job ${id} ${status}${resultHint}`;
+  }
+  return JSON.stringify(payload);
+}
+
+function renderSetup(payload: Record<string, unknown>): string {
+  const lines: string[] = [];
+  if (typeof payload.summary === "string") lines.push(payload.summary);
+  const steps = payload.steps as unknown[];
+  for (const step of steps) {
+    if (!isRecord(step)) continue;
+    const status = typeof step.status === "string" ? step.status : "todo";
+    const id = typeof step.id === "string" ? step.id : "step";
+    lines.push(`[${status}] ${id}`);
+    if (typeof step.command === "string") lines.push(`  ${step.command}`);
+  }
+  return lines.join("\n");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function withResultRelayInstruction(payload: unknown): unknown {
+  if (!isRecord(payload) || typeof payload.result !== "string") return payload;
+  return {
+    ...payload,
+    agentInstruction:
+      "AI agents: data.result is the primary deliverable. If it is at or under 6000 characters, roughly 1500 tokens or two terminal pages, prefer relaying it in full. If longer, condense only as needed; preserve Pro's prose language, structure, and voice. Do not replace it with a short synopsis unless the user asks for a summary. Do not send probe or smoke-test queries (e.g., 'reply with OK') to pro-cli; send the real request directly. Every call consumes the user's Pro quota. Only test connectivity if the user explicitly asks.",
+    resultStats: {
+      chars: payload.result.length,
+      approximateTokens: Math.ceil(payload.result.length / APPROX_CHARS_PER_TOKEN),
+      fullRelayThresholdChars: FULL_RELAY_THRESHOLD_CHARS,
+      fullRelayThresholdApproxTokens: Math.ceil(
+        FULL_RELAY_THRESHOLD_CHARS / APPROX_CHARS_PER_TOKEN,
+      ),
+    },
+  };
+}

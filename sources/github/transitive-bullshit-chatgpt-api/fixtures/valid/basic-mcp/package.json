@@ -1,0 +1,23 @@
+{
+  "name": "@agentic/platform-fixtures-basic-mcp",
+  "private": true,
+  "author": "Travis Fischer <travis@transitivebullsh.it>",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/transitive-bullshit/agentic.git",
+    "directory": "packages/fixtures/valid/basic-mcp"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "run-s test:*",
+    "test:typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agentic/platform": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "fastmcp": "catalog:",
+    "zod": "catalog:"
+  }
+}

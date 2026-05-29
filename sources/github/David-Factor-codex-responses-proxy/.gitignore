@@ -1,0 +1,50 @@
+# Binaries and build output
+/bin/
+/build/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+codex-responses-proxy
+
+# Go workspace/vendor artifacts
+go.work
+go.work.sum
+/vendor/
+
+# Coverage and profiling
+coverage.out
+coverage.html
+*.coverprofile
+*.prof
+*.pprof
+
+# Dependency/tool caches
+.gocache/
+.gomodcache/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+*.local
+
+# Codex/OpenAI auth material - never commit these
+.codex/
+auth.json
+
+# Logs
+*.log
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

@@ -1,0 +1,373 @@
+"""Search models for query parameters and results.
+
+This module defines the SearchQuery and SearchResult Pydantic models for
+encapsulating search parameters and returned results with relevance scoring.
+
+Constitution Compliance:
+- Principle VI: Strict typing with mypy --strict compliance
+- Principle I: Library-first (importable, reusable models)
+- FR-224, FR-227: Immutability via frozen=True
+
+Advanced Search Features (v1.1.0):
+- FR-001-006: Exact phrase matching (phrases field)
+- FR-007-011: Boolean match mode (match_mode field)
+- FR-012-016: Exclude keywords (exclude_keywords field)
+- FR-017-020: Role filtering (role_filter field)
+- FR-021-025: Message snippets (snippet field in SearchResult)
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Generic, Literal, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+# Generic type variable for conversation types
+# Not bound to allow compatibility with all conversation implementations
+ConversationT = TypeVar("ConversationT")
+
+
+# Type aliases for search result sorting (v1.2.0 Baseline Enhancement Package)
+# FR-043-045: Sort field options (score, date, title, messages)
+# FR-046-048: Sort order options (asc, desc)
+SortField = Literal["score", "date", "title", "messages"]
+SortOrder = Literal["asc", "desc"]
+
+
+class SearchQuery(BaseModel):
+    """Search query parameters with filters.
+
+    Encapsulates all search parameters including keywords, title filtering,
+    date range filtering, and result limits. All filters are optional but
+    at least one should be provided for meaningful results.
+
+    Immutability:
+        This model is FROZEN - attempting to modify fields will raise ValidationError.
+        Use .model_copy(update={...}) to create modified instances.
+
+    Example:
+        ```python
+        from datetime import date
+
+        # Keyword search
+        query = SearchQuery(keywords=["algorithm", "design"], limit=10)
+
+        # Title filter only (fast, metadata-only)
+        query = SearchQuery(title_filter="Project")
+
+        # Combined filters
+        query = SearchQuery(
+            keywords=["refactor"],
+            title_filter="Project",
+            from_date=date(2024, 1, 1),
+            to_date=date(2024, 3, 31),
+            limit=20
+        )
+
+        # Check filter types
+        if query.has_keyword_search():
+            print("Performing full-text search")
+        ```
+
+    Attributes:
+        keywords: Keywords for full-text search (OR logic, case-insensitive)
+        title_filter: Partial match on conversation title (metadata-only, fast)
+        from_date: Start date for date range filter (inclusive)
+        to_date: End date for date range filter (inclusive)
+        limit: Maximum results to return (1-1000, default: 10)
+    """
+
+    model_config = ConfigDict(
+        frozen=True,  # Immutability
+        strict=True,  # Strict validation
+        extra="forbid",  # Reject unknown fields
+        validate_assignment=True,
+        arbitrary_types_allowed=False,
+    )
+
+    # Optional Search Filters
+    keywords: list[str] | None = Field(
+        default=None,
+        description="Keywords for full-text search (OR logic, case-insensitive)",
+    )
+    title_filter: str | None = Field(
+        default=None,
+        description="Partial match on conversation title (metadata-only, case-insensitive)",
+    )
+    from_date: date | None = Field(
+        default=None,
+        description="Start date for date range filter (inclusive)",
+    )
+    to_date: date | None = Field(
+        default=None,
+        description="End date for date range filter (inclusive)",
+    )
+
+    # Result Limit (per FR-332)
+    limit: int = Field(
+        default=10,
+        gt=0,
+        le=1000,
+        description="Maximum results to return (1-1000, default: 10)",
+    )
+
+    # NEW v1.1.0: Exact phrase matching (FR-001-006)
+    phrases: list[str] | None = Field(
+        default=None,
+        description="Exact phrases to match (no tokenization, case-insensitive)",
+    )
+
+    # NEW v1.1.0: Boolean match mode (FR-007-011)
+    match_mode: Literal["all", "any"] = Field(
+        default="any",
+        description="'all' requires ALL keywords/phrases; 'any' matches ANY (default)",
+    )
+
+    # NEW v1.1.0: Exclude keywords (FR-012-016)
+    exclude_keywords: list[str] | None = Field(
+        default=None,
+        description="Keywords to exclude from results (uses same tokenization as keywords)",
+    )
+
+    # NEW v1.1.0: Role filter (FR-017-020)
+    role_filter: Literal["user", "assistant", "system"] | None = Field(
+        default=None,
+        description="Filter to messages from specific role only",
+    )
+
+    # NEW v1.2.0: Message count filtering (FR-004-008)
+    min_messages: int | None = Field(
+        default=None,
+        ge=1,
+        description="Minimum message count filter (inclusive, must be >= 1)",
+    )
+    max_messages: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum message count filter (inclusive, must be >= 1)",
+    )
+
+    # NEW v1.2.0: Sort options (FR-043-048)
+    sort_by: SortField = Field(
+        default="score",
+        description="Sort field: score (relevance), date (created/updated), title, or messages (FR-043)",
+    )
+    sort_order: SortOrder = Field(
+        default="desc",
+        description="Sort order: asc (ascending) or desc (descending) (FR-044)",
+    )
+
+    @model_validator(mode="after")
+    def validate_message_count_bounds(self) -> SearchQuery:
+        """Validate min_messages <= max_messages when both are set (FR-005).
+
+        Raises:
+            ValueError: If min_messages > max_messages
+
+        Example:
+            ```python
+            # Valid: min <= max
+            query = SearchQuery(min_messages=5, max_messages=20)
+
+            # Invalid: min > max
+            try:
+                query = SearchQuery(min_messages=20, max_messages=5)
+            except ValidationError as e:
+                print(e)  # "min_messages (20) must be <= max_messages (5)"
+            ```
+        """
+        if self.min_messages is not None and self.max_messages is not None:
+            if self.min_messages > self.max_messages:
+                raise ValueError(
+                    f"min_messages ({self.min_messages}) must be <= max_messages ({self.max_messages})"
+                )
+        return self
+
+    def has_keyword_search(self) -> bool:
+        """Check if keyword search is requested.
+
+        Returns:
+            True if keywords provided and non-empty, False otherwise
+
+        Example:
+            ```python
+            query = SearchQuery(keywords=["algorithm"])
+            assert query.has_keyword_search() is True
+            ```
+        """
+        return self.keywords is not None and len(self.keywords) > 0
+
+    def has_title_filter(self) -> bool:
+        """Check if title filtering is requested.
+
+        Returns:
+            True if title_filter provided and non-empty, False otherwise
+
+        Example:
+            ```python
+            query = SearchQuery(title_filter="Project")
+            assert query.has_title_filter() is True
+            ```
+        """
+        return self.title_filter is not None and len(self.title_filter.strip()) > 0
+
+    def has_date_filter(self) -> bool:
+        """Check if date range filtering is requested.
+
+        Returns:
+            True if either from_date or to_date provided, False otherwise
+
+        Example:
+            ```python
+            from datetime import date
+
+            query = SearchQuery(from_date=date(2024, 1, 1))
+            assert query.has_date_filter() is True
+            ```
+        """
+        return self.from_date is not None or self.to_date is not None
+
+    def has_phrase_search(self) -> bool:
+        """Check if phrase search is requested.
+
+        Returns:
+            True if phrases provided and non-empty, False otherwise
+
+        Example:
+            ```python
+            query = SearchQuery(phrases=["algo-insights"])
+            assert query.has_phrase_search() is True
+            ```
+        """
+        return self.phrases is not None and len(self.phrases) > 0
+
+    def has_exclude_keywords(self) -> bool:
+        """Check if exclude keywords filtering is requested.
+
+        Returns:
+            True if exclude_keywords provided and non-empty, False otherwise
+
+        Example:
+            ```python
+            query = SearchQuery(keywords=["python"], exclude_keywords=["django"])
+            assert query.has_exclude_keywords() is True
+            ```
+        """
+        return self.exclude_keywords is not None and len(self.exclude_keywords) > 0
+
+    def has_message_count_filter(self) -> bool:
+        """Check if message count filtering is requested (FR-004).
+
+        Returns:
+            True if either min_messages or max_messages is set, False otherwise
+
+        Example:
+            ```python
+            query = SearchQuery(min_messages=10)
+            assert query.has_message_count_filter() is True
+
+            query2 = SearchQuery(max_messages=50)
+            assert query2.has_message_count_filter() is True
+
+            query3 = SearchQuery()
+            assert query3.has_message_count_filter() is False
+            ```
+        """
+        return self.min_messages is not None or self.max_messages is not None
+
+
+class SearchResult(BaseModel, Generic[ConversationT]):
+    """Generic search result with relevance scoring.
+
+    Represents a conversation match from a search query with relevance
+    metadata. Results are typically sorted by score (descending) before
+    being returned to the user.
+
+    Generic Type:
+        ConversationT: Provider-specific conversation type (e.g., Conversation for OpenAI)
+
+    Immutability:
+        This model is FROZEN - attempting to modify fields will raise ValidationError.
+        Use .model_copy(update={...}) to create modified instances.
+
+    Example:
+        ```python
+        from echomine.models import Conversation, SearchResult
+
+        result: SearchResult[Conversation] = SearchResult(
+            conversation=conversation,
+            score=0.85,
+            matched_message_ids=["msg-001", "msg-005"]
+        )
+
+        print(f"Relevance: {result.score:.2f}")
+        print(f"Title: {result.conversation.title}")
+        print(f"Matched {len(result.matched_message_ids)} messages")
+
+        # Sort results by relevance
+        results = sorted(results, reverse=True)  # Uses __lt__
+        ```
+
+    Attributes:
+        conversation: Matched conversation object (full conversation, not just ID)
+        score: Relevance score (0.0-1.0, higher = better match)
+        matched_message_ids: Message IDs containing keyword matches
+    """
+
+    model_config = ConfigDict(
+        frozen=True,  # Immutability
+        strict=True,  # Strict validation
+        extra="forbid",  # Reject unknown fields
+        validate_assignment=True,
+        arbitrary_types_allowed=False,
+    )
+
+    conversation: ConversationT = Field(
+        ...,
+        description="Matched conversation object (full conversation, not just ID)",
+    )
+    score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Relevance score (0.0-1.0, higher = better match)",
+    )
+    matched_message_ids: list[str] = Field(
+        default_factory=list,
+        description="Message IDs containing keyword matches",
+    )
+
+    # NEW v1.1.0: Message snippet (FR-021-025)
+    snippet: str | None = Field(
+        default=None,
+        description="First ~100 chars of first matched message",
+    )
+
+    def __lt__(self, other: SearchResult[ConversationT]) -> bool:
+        """Enable sorting by relevance (descending).
+
+        When using sorted() or .sort(), results will be ordered by
+        relevance score in descending order (highest score first).
+
+        Args:
+            other: Another SearchResult to compare against
+
+        Returns:
+            True if self.score > other.score (reversed for descending sort)
+
+        Example:
+            ```python
+            results = [
+                SearchResult(conversation=c1, score=0.5, matched_message_ids=[]),
+                SearchResult(conversation=c2, score=0.9, matched_message_ids=[]),
+                SearchResult(conversation=c3, score=0.7, matched_message_ids=[]),
+            ]
+
+            # Sort descending by relevance
+            sorted_results = sorted(results, reverse=True)
+            # Order: [0.9, 0.7, 0.5]
+            ```
+        """
+        return self.score > other.score  # Reverse for descending sort

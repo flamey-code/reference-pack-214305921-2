@@ -1,0 +1,34 @@
+{
+  "name": "@agentic/platform-fixtures",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Internal test fixtures for the Agentic platform.",
+  "author": "Travis Fischer <travis@transitivebullsh.it>",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/transitive-bullshit/agentic.git",
+    "directory": "packages/fixtures"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./valid/**": "./valid/*",
+    "./invalid/**": "./invalid/*"
+  },
+  "files": [
+    "valid",
+    "invalid"
+  ],
+  "scripts": {
+    "test": "run-s test:*",
+    "test:typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agentic/platform": "workspace:*"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:"
+  }
+}

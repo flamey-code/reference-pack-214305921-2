@@ -1,0 +1,257 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`HTTP => MCP origin basic "add" tool > 6.0: POST @dev/test-basic-mcp/add 1`] = `
+[
+  {
+    "text": "42",
+    "type": "text",
+  },
+]
+`;
+
+exports[`HTTP => MCP origin basic "add" tool > 6.1: GET @dev/test-basic-mcp/add 1`] = `
+[
+  {
+    "text": "42",
+    "type": "text",
+  },
+]
+`;
+
+exports[`HTTP => OpenAPI origin basic GET caching > 4.0: GET @dev/test-basic-openapi/getPost 1`] = `
+{
+  "body": "aut dicta possimus sint mollitia voluptas commodi quo doloremque
+iste corrupti reiciendis voluptatem eius rerum
+sit cumque quod eligendi laborum minima
+perferendis recusandae assumenda consectetur porro architecto ipsum ipsam",
+  "id": 13,
+  "title": "dolorum ut in voluptas mollitia et saepe quo animi",
+  "userId": 2,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic GET caching > 4.1: GET @dev/test-basic-openapi/getPost?postId=13 1`] = `
+{
+  "body": "aut dicta possimus sint mollitia voluptas commodi quo doloremque
+iste corrupti reiciendis voluptatem eius rerum
+sit cumque quod eligendi laborum minima
+perferendis recusandae assumenda consectetur porro architecto ipsum ipsam",
+  "id": 13,
+  "title": "dolorum ut in voluptas mollitia et saepe quo animi",
+  "userId": 2,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic GET caching > 4.2: GET @dev/test-basic-openapi/get_post?postId=13 1`] = `
+{
+  "body": "aut dicta possimus sint mollitia voluptas commodi quo doloremque
+iste corrupti reiciendis voluptatem eius rerum
+sit cumque quod eligendi laborum minima
+perferendis recusandae assumenda consectetur porro architecto ipsum ipsam",
+  "id": 13,
+  "title": "dolorum ut in voluptas mollitia et saepe quo animi",
+  "userId": 2,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic POST caching > 5.0: POST @dev/test-basic-openapi/get_post 1`] = `
+{
+  "body": "aut dicta possimus sint mollitia voluptas commodi quo doloremque
+iste corrupti reiciendis voluptatem eius rerum
+sit cumque quod eligendi laborum minima
+perferendis recusandae assumenda consectetur porro architecto ipsum ipsam",
+  "id": 13,
+  "title": "dolorum ut in voluptas mollitia et saepe quo animi",
+  "userId": 2,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic POST caching > 5.1: POST @dev/test-basic-openapi/get_post 1`] = `
+{
+  "body": "aut dicta possimus sint mollitia voluptas commodi quo doloremque
+iste corrupti reiciendis voluptatem eius rerum
+sit cumque quod eligendi laborum minima
+perferendis recusandae assumenda consectetur porro architecto ipsum ipsam",
+  "id": 13,
+  "title": "dolorum ut in voluptas mollitia et saepe quo animi",
+  "userId": 2,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic bypass caching > 3.0: GET @dev/test-basic-openapi/getPost 1`] = `
+{
+  "body": "consectetur animi nesciunt iure dolore
+enim quia ad
+veniam autem ut quam aut nobis
+et est aut quod aut provident voluptas autem voluptas",
+  "id": 9,
+  "title": "nesciunt iure omnis dolorem tempora et accusantium",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic bypass caching > 3.1: GET @dev/test-basic-openapi/getPost?postId=9 1`] = `
+{
+  "body": "consectetur animi nesciunt iure dolore
+enim quia ad
+veniam autem ut quam aut nobis
+et est aut quod aut provident voluptas autem voluptas",
+  "id": 9,
+  "title": "nesciunt iure omnis dolorem tempora et accusantium",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic bypass caching > 3.2: GET @dev/test-basic-openapi/get_post?postId=9 1`] = `
+{
+  "body": "consectetur animi nesciunt iure dolore
+enim quia ad
+veniam autem ut quam aut nobis
+et est aut quod aut provident voluptas autem voluptas",
+  "id": 9,
+  "title": "nesciunt iure omnis dolorem tempora et accusantium",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic bypass caching > 3.3: GET @dev/test-basic-openapi/get_post?postId=9 1`] = `
+{
+  "body": "consectetur animi nesciunt iure dolore
+enim quia ad
+veniam autem ut quam aut nobis
+et est aut quod aut provident voluptas autem voluptas",
+  "id": 9,
+  "title": "nesciunt iure omnis dolorem tempora et accusantium",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic bypass caching > 3.4: GET @dev/test-basic-openapi/get_post?postId=9 1`] = `
+{
+  "body": "consectetur animi nesciunt iure dolore
+enim quia ad
+veniam autem ut quam aut nobis
+et est aut quod aut provident voluptas autem voluptas",
+  "id": 9,
+  "title": "nesciunt iure omnis dolorem tempora et accusantium",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic getPost errors > 1.8: POST @dev/test-basic-openapi/getPost 1`] = `
+{
+  "body": "quia et suscipit
+suscipit recusandae consequuntur expedita et cum
+reprehenderit molestiae ut ut quas totam
+nostrum rerum est autem sunt rem eveniet architecto",
+  "id": 1,
+  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic getPost errors > 1.9: GET @dev/test-basic-openapi/getPost 1`] = `
+{
+  "body": "quia et suscipit
+suscipit recusandae consequuntur expedita et cum
+reprehenderit molestiae ut ut quas totam
+nostrum rerum est autem sunt rem eveniet architecto",
+  "id": 1,
+  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic getPost success > 0.0: POST @dev/test-basic-openapi/getPost 1`] = `
+{
+  "body": "quia et suscipit
+suscipit recusandae consequuntur expedita et cum
+reprehenderit molestiae ut ut quas totam
+nostrum rerum est autem sunt rem eveniet architecto",
+  "id": 1,
+  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic getPost success > 0.1: POST @dev/test-basic-openapi@latest/getPost 1`] = `
+{
+  "body": "quia et suscipit
+suscipit recusandae consequuntur expedita et cum
+reprehenderit molestiae ut ut quas totam
+nostrum rerum est autem sunt rem eveniet architecto",
+  "id": 1,
+  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic getPost success > 0.2: GET @dev/test-basic-openapi/getPost 1`] = `
+{
+  "body": "quia et suscipit
+suscipit recusandae consequuntur expedita et cum
+reprehenderit molestiae ut ut quas totam
+nostrum rerum est autem sunt rem eveniet architecto",
+  "id": 1,
+  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic getPost success > 0.3: GET @dev/test-basic-openapi/getPost?postId=1 1`] = `
+{
+  "body": "quia et suscipit
+suscipit recusandae consequuntur expedita et cum
+reprehenderit molestiae ut ut quas totam
+nostrum rerum est autem sunt rem eveniet architecto",
+  "id": 1,
+  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic getPost success > 0.4: GET @dev/test-basic-openapi/get_post?postId=1 1`] = `
+{
+  "body": "quia et suscipit
+suscipit recusandae consequuntur expedita et cum
+reprehenderit molestiae ut ut quas totam
+nostrum rerum est autem sunt rem eveniet architecto",
+  "id": 1,
+  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin basic getPost success > 0.5: GET @dev/test-basic-openapi/getPost 1`] = `
+{
+  "body": "quia et suscipit
+suscipit recusandae consequuntur expedita et cum
+reprehenderit molestiae ut ut quas totam
+nostrum rerum est autem sunt rem eveniet architecto",
+  "id": 1,
+  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+  "userId": 1,
+}
+`;
+
+exports[`HTTP => OpenAPI origin default bypass caching > 2.0: GET @dev/test-everything-openapi/echo 1`] = `
+{
+  "postId": "9",
+}
+`;
+
+exports[`HTTP => OpenAPI origin everything "echo" tool with empty body > 10.0: POST @dev/test-everything-openapi/echo 1`] = `{}`;
+
+exports[`HTTP => OpenAPI origin everything "pure" tool > 8.0: POST @dev/test-everything-openapi/pure 1`] = `
+{
+  "foo": "bar",
+  "nala": "kitten",
+}
+`;
+
+exports[`HTTP => OpenAPI origin everything "pure" tool > 8.1: POST @dev/test-everything-openapi/pure 1`] = `
+{
+  "foo": "bar",
+  "nala": "kitten",
+}
+`;

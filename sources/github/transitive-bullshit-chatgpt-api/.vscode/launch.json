@@ -1,0 +1,76 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug API",
+      "type": "node",
+      "request": "launch",
+
+      // Debug server in VSCode
+      "cwd": "${workspaceFolder}/apps/api",
+      "program": "src/server.ts",
+      // "program": "${file}",
+
+      /*
+       * Path to tsx binary
+       * Assuming locally installed
+       */
+      "runtimeExecutable": "tsx",
+
+      /*
+       * Open terminal when debugging starts (Optional)
+       * Useful to see console.logs
+       */
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+
+      // Files to exclude from debugger (e.g. call stack)
+      "skipFiles": [
+        // Node.js internal core modules
+        "<node_internals>/**"
+
+        // Ignore all dependencies (optional)
+        // "${workspaceFolder}/node_modules/**"
+      ]
+    }
+    // Wrangler's vscode support seems to be extremely buggy. It sometimes works
+    // 1/10th of the time, but nothing I tried could improve that consistency.
+    // Will use browser debugger instead for now.
+    // {
+    //   "name": "gateway",
+    //   "type": "node",
+    //   "request": "attach",
+    //   "port": 9229,
+    //   "cwd": "${workspaceFolder}/apps/gateway",
+    //   // "cwd": "${workspaceFolder}",
+    //   // "cwd": "/",
+    //   "attachExistingChildren": false,
+    //   "autoAttachChildProcesses": false,
+    //   "sourceMaps": true,
+    //   "outFiles": ["${workspaceFolder}/apps/gateway/.wrangler/tmp/**/*"],
+    //   "resolveSourceMapLocations": null,
+    //   // "resolveSourceMapLocations": ["**", "!**/node_modules/**"],
+    //   "skipFiles": ["<node_internals>/**"],
+    //   "internalConsoleOptions": "neverOpen",
+    //   "restart": true
+    // },
+    // {
+    //   "name": "Wrangler",
+    //   "type": "node",
+    //   "request": "attach",
+    //   "port": 9229,
+    //   "cwd": "/",
+    //   "resolveSourceMapLocations": null,
+    //   "attachExistingChildren": false,
+    //   "autoAttachChildProcesses": false,
+    //   "sourceMaps": true // works with or without this line (supposedly)
+    // }
+  ]
+  // "compounds": [
+  //   {
+  //     "name": "Debug Workers",
+  //     "configurations": ["gateway"],
+  //     "stopAll": true
+  //   }
+  // ]
+}
